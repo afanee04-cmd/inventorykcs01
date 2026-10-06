@@ -1,0 +1,6 @@
+{
+  "name": "ระบบคลังยานอก โรงพยาบาลเขาชัยสน",
+  "description": "ระบบบริหารจัดการคลังยานอกโรงพยาบาลเขาชัยสน ติดตามวันหมดอายุ สต็อกต่ำกว่า Min แจ้งเตือน LINE และเชื่อมโยง Google Apps Script",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
