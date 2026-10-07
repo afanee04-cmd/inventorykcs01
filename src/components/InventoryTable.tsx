@@ -129,41 +129,62 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
   const copyForGoogleSheet = () => {
     const headers = [
-      'รหัสยา',
-      'ชื่อยา',
-      'Shelf',
+      'รหัสยา (ID)',
+      'ชื่อยา (Drug Name)',
+      'Shelf (ชั้นวาง)',
       'Lot No.',
-      'บริษัทผู้ผลิต/จัดจำหน่าย',
-      'แหล่งที่มา',
-      'คลังย่อย',
-      'วันหมดอายุ',
-      'สถานะยา',
-      'จำนวนคงเหลือ',
-      'หน่วยนับ',
-      'หน่วยบรรจุ',
-      'Min',
-      'Max',
-      'สถานะสต็อก',
-      'วันที่รับเข้า',
+      'บริษัท (Company)',
+      'แหล่งที่มา (Source)',
+      'คลังย่อย (Sub-warehouse)',
+      'วันหมดอายุ (Expiry)',
+      'สถานะยา (Drug Status)',
+      'คงเหลือ (Qty)',
+      'หน่วยนับ (Unit)',
+      'หน่วยบรรจุ (Package Unit)',
+      'Min (ขั้นต่ำ)',
+      'Max (สูงสุด)',
+      'สถานะสต็อก (Stock Status)',
+      'สรุปการแจ้งเตือน (Alert Summary)',
+      'วันที่รับเข้า (Received)',
       'สถานะ (ปลอดภัย/ใกล้หมดอายุ/หมดอายุ/สต็อกถึงเกณฑ์ min)',
+      'อัปเดตล่าสุด (Last Updated)',
     ];
 
     const lines = [headers.join('\t')];
     drugs.forEach((d) => {
       const st = getDrugStatus(d);
       const simpleSt = getSimpleDrugStatus(d);
-      let statusText = 'ปกติ';
+      
+      let expText = '✅ ปลอดภัย';
       if (st.expiryStatus === 'expired') {
-        statusText = `หมดอายุแล้ว (เลยมา ${Math.abs(st.daysLeft)} วัน)`;
+        expText = `🚨 หมดอายุแล้ว (เลยมา ${Math.abs(st.daysLeft)} วัน)`;
       } else if (st.expiryStatus === 'near_expiry') {
-        statusText = `ใกล้หมดอายุ (เหลือ ${st.daysLeft} วัน)`;
-      } else if (st.stockStatus === 'low') {
-        statusText = `สต็อกต่ำกว่า Min (${d.quantity}/${d.min})`;
+        expText = `⏳ ใกล้หมดอายุ (เหลือ ${st.daysLeft} วัน)`;
       } else {
-        statusText = `ปกติ (เหลือ ${st.daysLeft} วัน)`;
+        expText = `✅ ปลอดภัย (เหลือ ${st.daysLeft} วัน)`;
       }
 
-      let stockText = d.quantity <= d.min ? `ถึงเกณฑ์ Min (เหลือ ${d.quantity}/${d.min})` : 'ปกติ';
+      let stockText = '✅ ปกติ';
+      if (d.quantity <= 0) {
+        stockText = '🔴 สต็อกหมด (0)';
+      } else if (d.quantity <= d.min) {
+        stockText = `⚠️ ถึงเกณฑ์ Min หรือต่ำกว่า (${d.quantity}/${d.min})`;
+      } else if (d.max > 0 && d.quantity > d.max) {
+        stockText = `📦 สต็อกเกิน Max (${d.quantity}/${d.max})`;
+      } else {
+        stockText = `✅ ปกติ (${d.quantity})`;
+      }
+
+      let alertText = '🟢 ปกติ';
+      if (st.expiryStatus === 'expired') {
+        alertText = '🔴 หมดอายุแล้ว (ต้องทำลาย/ส่งคืน)';
+      } else if (st.expiryStatus === 'near_expiry' && st.stockStatus === 'low') {
+        alertText = '⚡ วิกฤต: ใกล้หมดอายุ & ต่ำกว่า Min';
+      } else if (st.expiryStatus === 'near_expiry') {
+        alertText = '🟡 ใกล้หมดอายุ (≤ 70 วัน)';
+      } else if (st.stockStatus === 'low') {
+        alertText = '🟠 ถึงเกณฑ์ Min (ต้องสั่งเพิ่ม)';
+      }
 
       lines.push([
         d.id,
@@ -174,15 +195,17 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         d.source,
         d.subWarehouse,
         d.expiryDate,
-        statusText,
+        expText,
         d.quantity,
         d.unit,
         d.packageUnit || '-',
         d.min,
         d.max,
         stockText,
+        alertText,
         d.receivedDate,
         simpleSt.text,
+        new Date().toISOString(),
       ].join('\t'));
     });
 
