@@ -13,6 +13,7 @@ export interface DrugItem {
   expiryDate: string;     // วันหมดอายุ (YYYY-MM-DD)
   quantity: number;       // ปริมาณคงเหลือ
   unit: string;           // หน่วยนับ เช่น เม็ด, แคปซูล, แผง, ขวด, หลอด
+  packageUnit?: string;   // หน่วยบรรจุ เช่น 10x10 เม็ด/กล่อง, 500 เม็ด/ขวด, 10 ขวด/ลัง
   min: number;            // ปริมาณต่ำสุด (Min)
   max: number;            // ปริมาณสูงสุด (Max)
   receivedDate: string;   // วันที่รับเข้า

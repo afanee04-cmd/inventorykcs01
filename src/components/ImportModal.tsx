@@ -63,6 +63,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     expiryDate: '',
     quantity: 100,
     unit: 'เม็ด',
+    packageUnit: '10x10 เม็ด/กล่อง',
     min: 50,
     max: 1000,
   });
@@ -121,7 +122,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     parsedRows.forEach((row, idx) => {
       if (selectedIndices.has(idx)) {
         itemsToAdd.push({
-          id: `KCS-IMP-${timestamp.toString().slice(-4)}-${idx + 1}`,
+          id: row.id || `KCS-IMP-${timestamp.toString().slice(-4)}-${idx + 1}`,
           name: row.name,
           shelf: row.shelf || 'ทั่วไป',
           lot: row.lot || 'N/A',
@@ -131,6 +132,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           expiryDate: row.expiryDate,
           quantity: row.quantity,
           unit: row.unit,
+          packageUnit: row.packageUnit || '',
           min: row.min,
           max: row.max,
           receivedDate: row.receivedDate || new Date().toISOString().split('T')[0],
@@ -228,6 +230,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       expiryDate: pdfItemForm.expiryDate,
       quantity: Number(pdfItemForm.quantity || 0),
       unit: pdfItemForm.unit || 'เม็ด',
+      packageUnit: pdfItemForm.packageUnit || '',
       min: Number(pdfItemForm.min || 0),
       max: Number(pdfItemForm.max || 0),
       receivedDate: new Date().toISOString().split('T')[0],
@@ -386,6 +389,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                         <th className="p-2.5">แหล่งที่มา</th>
                         <th className="p-2.5">วันหมดอายุ</th>
                         <th className="p-2.5">จำนวน</th>
+                        <th className="p-2.5">หน่วยนับ</th>
+                        <th className="p-2.5">หน่วยบรรจุ</th>
                         <th className="p-2.5">Min/Max</th>
                         <th className="p-2.5">สถานะ</th>
                       </tr>
@@ -424,7 +429,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                             </td>
                             <td className="p-2.5 font-mono">{row.expiryDate}</td>
                             <td className="p-2.5 font-bold text-slate-800">
-                              {row.quantity} {row.unit}
+                              {row.quantity}
+                            </td>
+                            <td className="p-2.5 text-slate-700">
+                              {row.unit}
+                            </td>
+                            <td className="p-2.5 font-medium text-emerald-800">
+                              {row.packageUnit || '-'}
                             </td>
                             <td className="p-2.5 text-slate-500">
                               {row.min} / {row.max}
@@ -668,7 +679,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">จำนวนรับเข้า</label>
                     <input
@@ -681,12 +692,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">หน่วยนับ</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">หน่วยนับย่อย</label>
                     <input
                       type="text"
                       value={pdfItemForm.unit}
                       onChange={(e) => setPdfItemForm({ ...pdfItemForm, unit: e.target.value })}
+                      placeholder="เม็ด, แคปซูล, Vial"
                       className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">หน่วยบรรจุ</label>
+                    <input
+                      type="text"
+                      value={pdfItemForm.packageUnit}
+                      onChange={(e) => setPdfItemForm({ ...pdfItemForm, packageUnit: e.target.value })}
+                      placeholder="เช่น 10x10 เม็ด/กล่อง"
+                      className="w-full px-3 py-1.5 text-xs border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-emerald-50/20"
                     />
                   </div>
 

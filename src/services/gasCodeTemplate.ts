@@ -25,7 +25,7 @@ const SHEET_NAME_CONFIG = "การตั้งค่า";
 const LINE_CHANNEL_ACCESS_TOKEN = "YOUR_LINE_CHANNEL_ACCESS_TOKEN";
 const LINE_DESTINATION_ID = "YOUR_LINE_USER_OR_GROUP_ID";
 
-// หัวตารางคลังยาแบบแสดงสถานะครบถ้วน
+// หัวตารางคลังยาแบบแสดงสถานะครบถ้วน (พร้อมหน่วยบรรจุ)
 const INVENTORY_HEADERS = [
   "รหัสยา (ID)", 
   "ชื่อยา (Drug Name)", 
@@ -38,6 +38,7 @@ const INVENTORY_HEADERS = [
   "สถานะยา (Drug Status)", 
   "คงเหลือ (Qty)", 
   "หน่วยนับ (Unit)", 
+  "หน่วยบรรจุ (Package Unit)", 
   "Min (ขั้นต่ำ)", 
   "Max (สูงสุด)", 
   "สถานะสต็อก (Stock Status)", 
@@ -64,7 +65,8 @@ function doGet(e) {
       }
       
       const items = [];
-      const isNewLayout = data[0].length >= 18;
+      const is19Layout = data[0].length >= 19;
+      const is18Layout = data[0].length === 18;
       
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
@@ -72,13 +74,23 @@ function doGet(e) {
         
         let qty = 0;
         let unit = "เม็ด";
+        let packageUnit = "";
         let minVal = 0;
         let maxVal = 0;
         let receivedVal = "";
         let notesVal = "";
         let updatedVal = "";
         
-        if (isNewLayout) {
+        if (is19Layout) {
+          qty = Number(row[9] || 0);
+          unit = String(row[10] || "เม็ด");
+          packageUnit = String(row[11] || "");
+          minVal = Number(row[12] || 0);
+          maxVal = Number(row[13] || 0);
+          receivedVal = formatDateValue(row[16]);
+          notesVal = String(row[17] || "");
+          updatedVal = String(row[18] || "");
+        } else if (is18Layout) {
           qty = Number(row[9] || 0);
           unit = String(row[10] || "เม็ด");
           minVal = Number(row[11] || 0);
@@ -108,6 +120,7 @@ function doGet(e) {
           expiryDate: formatDateValue(row[7]),
           quantity: qty,
           unit: unit,
+          packageUnit: packageUnit,
           min: minVal,
           max: maxVal,
           receivedDate: receivedVal,
@@ -182,6 +195,7 @@ function doPost(e) {
         statusInfo.expiryStatusText,
         Number(item.quantity || 0),
         item.unit,
+        item.packageUnit || "",
         Number(item.min || 0),
         Number(item.max || 0),
         statusInfo.stockStatusText,
@@ -207,7 +221,7 @@ function doPost(e) {
       const sheet = getOrCreateSheet(ss, SHEET_NAME_INVENTORY);
       sheet.clearContents();
       
-      // ใส่หัวตารางใหม่ 18 คอลัมน์
+      // ใส่หัวตารางใหม่ 19 คอลัมน์ (รวมหน่วยบรรจุ)
       sheet.appendRow(INVENTORY_HEADERS);
       
       if (items.length > 0) {
@@ -231,6 +245,7 @@ function doPost(e) {
             statusInfo.expiryStatusText,
             Number(item.quantity || 0),
             item.unit, 
+            item.packageUnit || "",
             Number(item.min || 0), 
             Number(item.max || 0),
             statusInfo.stockStatusText,

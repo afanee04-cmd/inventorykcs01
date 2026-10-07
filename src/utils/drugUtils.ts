@@ -173,6 +173,57 @@ export function getSimpleDrugStatus(drug: DrugItem): {
 }
 
 /**
+ * แยกหน่วยนับย่อยและหน่วยบรรจุอย่างชาญฉลาดและเสถียร
+ */
+export function parseUnitAndPackage(unitRaw?: string, packageRaw?: string): { unit: string; packageUnit: string } {
+  let pkgClean = (packageRaw || '').trim().replace(/^(?:หน่วยบรรจุ|ขนาดบรรจุ|บรรจุ|package|pack)[:\s]*/i, '').trim();
+  let uClean = (unitRaw || '').trim();
+
+  // หาก uClean มีข้อมูลบรรจุซ่อนอยู่ในวงเล็บ เช่น "เม็ด (บรรจุ: 10x10 เม็ด/กล่อง)" หรือ "แคปซูล [500 เม็ด/ขวด]"
+  const bracketMatch = uClean.match(/^([^(|\[]+)(?:[(|\[]\s*(?:บรรจุ[:\s]*|package[:\s]*|pack[:\s]*)?([^)|\]]+)[)|\]])?/i);
+  if (bracketMatch) {
+    const extractedUnit = bracketMatch[1].trim();
+    const extractedPkg = bracketMatch[2] ? bracketMatch[2].replace(/^(?:บรรจุ|package|pack)[:\s]*/i, '').trim() : '';
+    if (extractedPkg && !pkgClean) {
+      pkgClean = extractedPkg;
+    }
+    if (extractedUnit) {
+      uClean = extractedUnit;
+    }
+  }
+
+  // ป้องกันกรณีสลับคอลัมน์: ถ้าหน่วยนับมีเครื่องหมาย x หรือ slash เช่น "10x10 เม็ด/กล่อง" หรือ "100 tab/bot"
+  // ให้สลับเป็น packageUnit อัตโนมัติ
+  if (!pkgClean && (uClean.includes('x') || uClean.includes('X') || uClean.includes('/') || uClean.includes("'s") || uClean.includes('กล่อง') || uClean.includes('ลัง'))) {
+    // ถ้าดูเหมือนหน่วยบรรจุมากกว่าหน่วยนับเดี่ยว
+    if (uClean.match(/\d+\s*(?:x|\*|\/)\s*\d+/i) || uClean.includes('/กล่อง') || uClean.includes('/ขวด') || uClean.includes('/ลัง')) {
+      pkgClean = uClean;
+      // พยายามเดา unit ย่อย เช่น เม็ด, แคปซูล, แอมพูล
+      if (uClean.includes('แคปซูล')) uClean = 'แคปซูล';
+      else if (uClean.includes('เม็ด') || uClean.includes('tab')) uClean = 'เม็ด';
+      else if (uClean.includes('vial') || uClean.includes('ไวยัล')) uClean = 'Vial';
+      else if (uClean.includes('amp') || uClean.includes('แอมพูล')) uClean = 'Ampoule';
+      else if (uClean.includes('ขวด')) uClean = 'ขวด';
+      else if (uClean.includes('หลอด')) uClean = 'หลอด';
+      else uClean = 'หน่วย';
+    }
+  }
+
+  return {
+    unit: uClean || 'หน่วย',
+    packageUnit: pkgClean || '',
+  };
+}
+
+/**
+ * ฟอร์แมตหน่วยนับสำหรับบันทึกลง Google Sheet
+ */
+export function formatUnitForSheet(unit: string, packageUnit?: string): string {
+  const u = (unit || '').trim() || 'หน่วย';
+  return u;
+}
+
+/**
  * ข้อมูลตั้งต้นสำหรับตัวอย่างระบบคลังยานอก รพ.เขาชัยสน
  */
 export const INITIAL_DRUGS: DrugItem[] = [
@@ -187,6 +238,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2026-11-20',
     quantity: 1500,
     unit: 'เม็ด',
+    packageUnit: '10x10 เม็ด/กล่อง',
     min: 2000,
     max: 10000,
     receivedDate: '2026-01-15',
@@ -204,6 +256,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2026-10-18',
     quantity: 350,
     unit: 'แคปซูล',
+    packageUnit: '50x10 แคปซูล/กล่อง',
     min: 500,
     max: 3000,
     receivedDate: '2026-03-10',
@@ -221,6 +274,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2026-09-28',
     quantity: 20,
     unit: 'Vial',
+    packageUnit: '1 Vial/กล่อง',
     min: 30,
     max: 100,
     receivedDate: '2026-02-01',
@@ -238,6 +292,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2027-04-15',
     quantity: 4500,
     unit: 'แคปซูล',
+    packageUnit: '14 แคปซูล/แผง (10 แผง/กล่อง)',
     min: 1000,
     max: 8000,
     receivedDate: '2026-04-10',
@@ -255,6 +310,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2026-11-05',
     quantity: 15,
     unit: 'Ampoule',
+    packageUnit: '10 Ampoules/กล่อง',
     min: 20,
     max: 50,
     receivedDate: '2026-05-12',
@@ -272,6 +328,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2027-08-30',
     quantity: 2800,
     unit: 'เม็ด',
+    packageUnit: '500 เม็ด/ขวด',
     min: 800,
     max: 5000,
     receivedDate: '2026-06-01',
@@ -289,6 +346,7 @@ export const INITIAL_DRUGS: DrugItem[] = [
     expiryDate: '2027-12-31',
     quantity: 85,
     unit: 'ขวด',
+    packageUnit: '10 ขวด/ลัง',
     min: 100,
     max: 400,
     receivedDate: '2026-07-20',

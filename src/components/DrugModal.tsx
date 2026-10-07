@@ -25,6 +25,7 @@ export const DrugModal: React.FC<DrugModalProps> = ({
     expiryDate: '',
     quantity: 100,
     unit: 'เม็ด',
+    packageUnit: '10x10 เม็ด/กล่อง',
     min: 50,
     max: 1000,
     receivedDate: new Date().toISOString().split('T')[0],
@@ -48,6 +49,7 @@ export const DrugModal: React.FC<DrugModalProps> = ({
         expiryDate: '',
         quantity: 100,
         unit: 'เม็ด',
+        packageUnit: '10x10 เม็ด/กล่อง',
         min: 50,
         max: 1000,
         receivedDate: new Date().toISOString().split('T')[0],
@@ -91,6 +93,7 @@ export const DrugModal: React.FC<DrugModalProps> = ({
       expiryDate: formData.expiryDate!,
       quantity: Number(formData.quantity || 0),
       unit: formData.unit?.trim() || 'หน่วย',
+      packageUnit: formData.packageUnit?.trim() || '',
       min: Number(formData.min || 0),
       max: Number(formData.max || 0),
       receivedDate: formData.receivedDate || new Date().toISOString().split('T')[0],
@@ -291,9 +294,9 @@ export const DrugModal: React.FC<DrugModalProps> = ({
             </div>
           </div>
 
-          {/* Row 6: จำนวนคงเหลือ & หน่วยนับ */}
+          {/* Row 6: จำนวนคงเหลือ, หน่วยนับย่อย & หน่วยบรรจุ */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 จำนวนคงเหลือปัจจุบัน <span className="text-rose-500">*</span>
               </label>
@@ -311,14 +314,28 @@ export const DrugModal: React.FC<DrugModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                หน่วยนับ
+                หน่วยนับย่อย (Unit)
               </label>
               <input
                 type="text"
                 value={formData.unit || ''}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                placeholder="เม็ด, แคปซูล, Vial, ขวด"
+                placeholder="เม็ด, แคปซูล, Vial, ขวด, หลอด"
                 className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span>หน่วยบรรจุ (Package Unit)</span>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1 rounded">บรรจุ</span>
+              </label>
+              <input
+                type="text"
+                value={formData.packageUnit || ''}
+                onChange={(e) => setFormData({ ...formData, packageUnit: e.target.value })}
+                placeholder="เช่น 10x10 เม็ด/กล่อง, 50 แอมพูล/กล่อง, 500 เม็ด/ขวด"
+                className="w-full px-3.5 py-2 text-xs sm:text-sm border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-emerald-50/30"
               />
             </div>
           </div>

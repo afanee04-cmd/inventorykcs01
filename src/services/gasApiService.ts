@@ -1,5 +1,5 @@
 import { DrugItem, DispenseRecord, GasConfig } from '../types/inventory';
-import { getDrugStatus, getSimpleDrugStatus } from '../utils/drugUtils';
+import { getDrugStatus, getSimpleDrugStatus, parseUnitAndPackage, formatUnitForSheet } from '../utils/drugUtils';
 
 export const GasApiService = {
   /**
@@ -23,7 +23,15 @@ export const GasApiService = {
 
       const data = await response.json();
       if (data.status === 'success' && Array.isArray(data.items)) {
-        return { success: true, items: data.items };
+        const normalizedItems: DrugItem[] = data.items.map((i: any) => {
+          const { unit, packageUnit } = parseUnitAndPackage(i.unit, i.packageUnit);
+          return {
+            ...i,
+            unit,
+            packageUnit: packageUnit || i.packageUnit || '',
+          };
+        });
+        return { success: true, items: normalizedItems };
       } else {
         return { success: false, error: data.message || 'ไม่พบรายการข้อมูลใน Sheet' };
       }
@@ -82,8 +90,12 @@ export const GasApiService = {
         const simpleStatus = getSimpleDrugStatus(item);
         const statusText = simpleStatus.text;
 
+        const formattedUnit = formatUnitForSheet(item.unit, item.packageUnit);
+
         return {
           ...item,
+          unit: formattedUnit,
+          packageUnit: item.packageUnit || '',
           notes: statusText,
           expiryStatusText: expText,
           stockStatusText: stockText,
@@ -152,9 +164,12 @@ export const GasApiService = {
 
       const simpleStatus = getSimpleDrugStatus(item);
       const statusText = simpleStatus.text;
+      const formattedUnit = formatUnitForSheet(item.unit, item.packageUnit);
 
       const enrichedItem = {
         ...item,
+        unit: formattedUnit,
+        packageUnit: item.packageUnit || '',
         notes: statusText,
         expiryStatusText: expText,
         stockStatusText: stockText,

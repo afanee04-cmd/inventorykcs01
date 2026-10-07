@@ -215,15 +215,58 @@ export default function App() {
     GasApiService.dispenseItemToGas(GAS_CONFIG, record).catch(() => {});
   };
 
-  // Import Drugs from Excel or PDF - Auto syncs to Google Sheet
+  // Import Drugs from Excel or PDF - Auto syncs to Google Sheet with smart merge
   const handleImportDrugs = (imported: DrugItem[]) => {
-    const combined = [...imported, ...drugs];
-    setDrugs(combined);
-    StorageService.saveDrugs(combined);
-    showToast('success', `นำเข้า ${imported.length} รายการเข้าสู่คลังยาเรียบร้อยแล้ว (อัปเดตชีทอัตโนมัติ)`);
+    // Smart merge: Map existing by ID and by Name+Lot
+    const existingById = new Map<string, DrugItem>();
+    const existingByNameLot = new Map<string, DrugItem>();
+    drugs.forEach((d) => {
+      existingById.set(d.id, d);
+      const key = `${d.name.trim().toLowerCase()}__${d.lot.trim().toLowerCase()}`;
+      existingByNameLot.set(key, d);
+    });
+
+    const updatedMap = new Map<string, DrugItem>(existingById);
+    let updatedCount = 0;
+    let addedCount = 0;
+
+    imported.forEach((item, idx) => {
+      const nameLotKey = `${item.name.trim().toLowerCase()}__${item.lot.trim().toLowerCase()}`;
+      const matchedExisting = (item.id && updatedMap.get(item.id)) || existingByNameLot.get(nameLotKey);
+
+      if (matchedExisting) {
+        // Update existing item while preserving original ID
+        const targetId = matchedExisting.id;
+        updatedMap.set(targetId, {
+          ...matchedExisting,
+          ...item,
+          id: targetId,
+          packageUnit: item.packageUnit || matchedExisting.packageUnit || '',
+          updatedAt: new Date().toISOString(),
+        });
+        updatedCount++;
+      } else {
+        // New item: Ensure unique ID
+        const cleanId = item.id || `KCS-IMP-${Date.now().toString().slice(-4)}-${idx + 1}`;
+        updatedMap.set(cleanId, {
+          ...item,
+          id: cleanId,
+          updatedAt: new Date().toISOString(),
+        });
+        addedCount++;
+      }
+    });
+
+    const finalDrugs = Array.from(updatedMap.values());
+    setDrugs(finalDrugs);
+    StorageService.saveDrugs(finalDrugs);
+    showToast(
+      'success',
+      `นำเข้าสำเร็จ: เพิ่มใหม่ ${addedCount} รายการ, อัปเดตข้อมูลเดิม ${updatedCount} รายการ (ซิงค์ลงชีทอัตโนมัติ)`
+    );
 
     // Auto-sync directly to Google Sheet in background
-    autoPushToSheet(combined);
+    autoPushToSheet(finalDrugs);
   };
 
   // Open Edit Modal

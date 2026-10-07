@@ -67,7 +67,8 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         const matchesLot = drug.lot.toLowerCase().includes(query);
         const matchesCompany = drug.company.toLowerCase().includes(query);
         const matchesNotes = (drug.notes || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesShelf && !matchesLot && !matchesCompany && !matchesNotes) {
+        const matchesPackage = (drug.packageUnit || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesShelf && !matchesLot && !matchesCompany && !matchesNotes && !matchesPackage) {
           return false;
         }
       }
@@ -139,6 +140,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       'สถานะยา',
       'จำนวนคงเหลือ',
       'หน่วยนับ',
+      'หน่วยบรรจุ',
       'Min',
       'Max',
       'สถานะสต็อก',
@@ -175,6 +177,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         statusText,
         d.quantity,
         d.unit,
+        d.packageUnit || '-',
         d.min,
         d.max,
         stockText,
@@ -373,6 +376,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
+              <th className="py-3 px-3 sm:px-3 font-semibold text-emerald-950">หน่วยบรรจุ</th>
               <th className="py-3 px-3.5 sm:px-4 cursor-pointer hover:bg-slate-200/60 transition" onClick={() => toggleSort('daysLeft')}>
                 <div className="flex items-center space-x-1">
                   <span>วันหมดอายุ</span>
@@ -386,7 +390,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
           <tbody className="divide-y divide-slate-100">
             {sortedDrugs.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-slate-500">
+                <td colSpan={10} className="py-12 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <HelpCircle className="w-8 h-8 text-slate-400" />
                     <p className="text-sm font-medium">ไม่พบรายการยาที่ตรงกับเงื่อนไขการค้นหา</p>
@@ -495,6 +499,17 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                           <span>Max: {drug.max}</span>
                         </div>
                       </div>
+                    </td>
+
+                    {/* หน่วยบรรจุ (Package Unit) */}
+                    <td className="py-3 px-3 sm:px-3 whitespace-nowrap">
+                      {drug.packageUnit ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs">
+                          {drug.packageUnit}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
                     </td>
 
                     {/* Expiry Date */}
