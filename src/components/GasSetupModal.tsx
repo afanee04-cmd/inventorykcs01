@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Settings, 
@@ -13,11 +13,14 @@ import {
   FileCode, 
   Folder, 
   Table, 
-  Loader2 
+  Loader2,
+  Send,
+  Bell
 } from 'lucide-react';
-import { GasConfig, DrugItem } from '../types/inventory';
+import { GasConfig, DrugItem, TelegramConfig } from '../types/inventory';
 import { generateGoogleAppsScriptCode } from '../services/gasCodeTemplate';
 import { GasApiService } from '../services/gasApiService';
+import { TelegramService } from '../services/telegramService';
 
 interface GasSetupModalProps {
   isOpen: boolean;
@@ -26,6 +29,9 @@ interface GasSetupModalProps {
   onSaveConfig: (config: GasConfig) => void;
   drugs: DrugItem[];
   onApplyFetchedDrugs: (drugs: DrugItem[]) => void;
+  telegramConfig: TelegramConfig;
+  onSaveTelegramConfig: (config: TelegramConfig) => void;
+  initialTab?: 'config' | 'code' | 'telegram' | 'guide';
 }
 
 export const GasSetupModal: React.FC<GasSetupModalProps> = ({
@@ -35,17 +41,37 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
   onSaveConfig,
   drugs,
   onApplyFetchedDrugs,
+  telegramConfig,
+  onSaveTelegramConfig,
+  initialTab = 'config',
 }) => {
-  const [activeTab, setActiveTab] = useState<'config' | 'code' | 'guide'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'code' | 'telegram' | 'guide'>('config');
   const [sheetId, setSheetId] = useState(gasConfig.sheetId || '');
   const [scriptUrl, setScriptUrl] = useState(gasConfig.scriptUrl || '');
   const [folderId, setFolderId] = useState(gasConfig.folderId || '');
   
+  // Telegram state
+  const [botToken, setBotToken] = useState(telegramConfig.botToken || '');
+  const [chatId, setChatId] = useState(telegramConfig.chatId || '');
+  const [telegramEnabled, setTelegramEnabled] = useState(telegramConfig.enabled ?? true);
+  const [notifyOnSave, setNotifyOnSave] = useState(telegramConfig.notifyOnSave ?? true);
+  const [notifyOnDispense, setNotifyOnDispense] = useState(telegramConfig.notifyOnDispense ?? true);
+  const [notifyOnStatusChange, setNotifyOnStatusChange] = useState(telegramConfig.notifyOnStatusChange ?? true);
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [isSendingStatusReport, setIsSendingStatusReport] = useState(false);
+
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncingUp, setIsSyncingUp] = useState(false);
   const [isSyncingDown, setIsSyncingDown] = useState(false);
+  const [isUpdatingHeaders, setIsUpdatingHeaders] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ success: boolean; text: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,21 +86,91 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
       folderId: folderId.trim(),
     };
     onSaveConfig(updated);
-    setStatusMessage({ success: true, text: 'บันทึกการตั้งค่า Google Apps Script สำเร็จ' });
+    setStatusMessage({ success: true, text: 'บันทึกการตั้งค่า Google Apps Script เรียบร้อยแล้ว' });
   };
 
-  // ทดสอบการเชื่อมต่อ
+  const handleSaveTelegram = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: TelegramConfig = {
+      botToken: botToken.trim(),
+      chatId: chatId.trim(),
+      enabled: telegramEnabled,
+      notifyOnSave,
+      notifyOnDispense,
+      notifyOnStatusChange,
+      lastAlertSentAt: telegramConfig.lastAlertSentAt,
+    };
+    onSaveTelegramConfig(updated);
+    setStatusMessage({ success: true, text: 'บันทึกการตั้งค่า Telegram Bot สำเร็จ' });
+  };
+
+  // ทดสอบส่งข้อความ Telegram
+  const handleTestTelegram = async () => {
+    setIsTestingTelegram(true);
+    setStatusMessage(null);
+    try {
+      const res = await TelegramService.testConnection({
+        botToken: botToken.trim(),
+        chatId: chatId.trim(),
+        enabled: true,
+        notifyOnSave,
+        notifyOnDispense,
+        notifyOnStatusChange,
+        lastAlertSentAt: null,
+      });
+      setStatusMessage({ success: res.success, text: res.message });
+    } catch (err: any) {
+      setStatusMessage({ success: false, text: `ส่งไม่สำเร็จ: ${err.message}` });
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
+
+  // ส่งรายงานสถานะยาทั้งหมดเข้า Telegram ตอนนี้
+  const handleSendTelegramStatusReport = async () => {
+    setIsSendingStatusReport(true);
+    setStatusMessage(null);
+    try {
+      const res = await TelegramService.notifyInventoryStatusAlerts(
+        {
+          botToken: botToken.trim(),
+          chatId: chatId.trim(),
+          enabled: true,
+          notifyOnSave,
+          notifyOnDispense,
+          notifyOnStatusChange,
+          lastAlertSentAt: new Date().toISOString(),
+        },
+        drugs
+      );
+      if (res.sentCount > 0) {
+        setStatusMessage({ success: true, text: `ส่งรายงานสถานะยาที่มีปัญหา ${res.sentCount} รายการ เข้า Telegram สำเร็จแล้ว!` });
+      } else {
+        setStatusMessage({ success: true, text: 'คลังยาปกติ ไม่มีรายการที่ต้องแจ้งเตือน (ทุกรายการปลอดภัย)' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ success: false, text: `ส่งไม่สำเร็จ: ${err.message}` });
+    } finally {
+      setIsSendingStatusReport(false);
+    }
+  };
+
+  // ทดสอบการเชื่อมต่ออย่างละเอียด
   const handleTestConnection = async () => {
     setIsTesting(true);
     setStatusMessage(null);
     try {
-      const url = `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}action=test&t=${Date.now()}`;
-      const res = await fetch(url, { method: 'GET', redirect: 'follow' });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setStatusMessage({ success: true, text: `เชื่อมต่อสำเร็จ! ${data.message || ''}` });
+      const res = await GasApiService.testConnection({
+        sheetId: sheetId.trim(),
+        scriptUrl: scriptUrl.trim(),
+        folderId: folderId.trim(),
+        autoSync: true,
+        lastSyncTime: null,
+      });
+      if (res.success) {
+        setStatusMessage({ success: true, text: res.message });
       } else {
-        setStatusMessage({ success: false, text: `Google Apps Script แจ้ง: ${data.message || 'Error'}` });
+        setStatusMessage({ success: false, text: res.message });
       }
     } catch (err: any) {
       setStatusMessage({
@@ -86,14 +182,38 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
     }
   };
 
+  // อัปเดตหัวตารางในชีทให้เป็น 19 คอลัมน์ (เพิ่มหน่วยบรรจุ)
+  const handleInitHeaders = async () => {
+    setIsUpdatingHeaders(true);
+    setStatusMessage(null);
+    try {
+      const res = await GasApiService.initHeadersInGas({
+        sheetId: sheetId.trim(),
+        scriptUrl: scriptUrl.trim(),
+        folderId: folderId.trim(),
+        autoSync: true,
+        lastSyncTime: null,
+      });
+      if (res.success) {
+        setStatusMessage({ success: true, text: 'อัปเดตหัวตารางใน Google Sheet เป็น 19 คอลัมน์ (เพิ่มคอลัมน์ "หน่วยบรรจุ") สำเร็จแล้ว!' });
+      } else {
+        setStatusMessage({ success: false, text: res.error || 'ไม่สามารถอัปเดตหัวตารางได้' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ success: false, text: `เกิดข้อผิดพลาด: ${err.message}` });
+    } finally {
+      setIsUpdatingHeaders(false);
+    }
+  };
+
   // ดึงข้อมูลจาก Google Sheet
   const handleFetchFromSheet = async () => {
     setIsSyncingDown(true);
     setStatusMessage(null);
     const res = await GasApiService.fetchDrugs({
-      sheetId,
-      scriptUrl,
-      folderId,
+      sheetId: sheetId.trim(),
+      scriptUrl: scriptUrl.trim(),
+      folderId: folderId.trim(),
       autoSync: true,
       lastSyncTime: null,
     });
@@ -103,7 +223,7 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
         setStatusMessage({ success: true, text: 'ดึงข้อมูลสำเร็จ แต่ยังไม่มีรายการยาใน Google Sheet' });
       } else {
         onApplyFetchedDrugs(res.items);
-        setStatusMessage({ success: true, text: `ดึงข้อมูลสำเร็จ! อัปเดต ${res.items.length} รายการจาก Google Sheet` });
+        setStatusMessage({ success: true, text: `ดึงข้อมูลสำเร็จ! อัปเดต ${res.items.length} รายการจาก Google Sheet เข้าสู่ระบบ` });
       }
     } else {
       setStatusMessage({ success: false, text: res.error || 'ดึงข้อมูลไม่สำเร็จ' });
@@ -116,12 +236,12 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
     setIsSyncingUp(true);
     setStatusMessage(null);
     const res = await GasApiService.syncAllToGas(
-      { sheetId, scriptUrl, folderId, autoSync: true, lastSyncTime: null },
+      { sheetId: sheetId.trim(), scriptUrl: scriptUrl.trim(), folderId: folderId.trim(), autoSync: true, lastSyncTime: null },
       drugs
     );
 
     if (res.success) {
-      setStatusMessage({ success: true, text: `ส่งข้อมูลยา ${drugs.length} รายการขึ้น Google Sheet เรียบร้อยแล้ว` });
+      setStatusMessage({ success: true, text: `ส่งข้อมูลยา ${drugs.length} รายการขึ้น Google Sheet พร้อมคอลัมน์หน่วยบรรจุเรียบร้อยแล้ว` });
     } else {
       setStatusMessage({ success: false, text: res.error || 'ส่งข้อมูลไม่สำเร็จ' });
     }
@@ -188,6 +308,18 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('telegram')}
+            className={`pb-3 px-4 text-xs sm:text-sm font-semibold flex items-center space-x-2 border-b-2 transition ${
+              activeTab === 'telegram'
+                ? 'border-sky-600 text-sky-900 bg-white rounded-t-lg'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Send className="w-4 h-4 text-sky-600" />
+            <span>Telegram Bot (@pharmkcsbot)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('guide')}
             className={`pb-3 px-4 text-xs sm:text-sm font-semibold flex items-center space-x-2 border-b-2 transition ${
               activeTab === 'guide'
@@ -229,34 +361,34 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
             )}
 
             {/* Quick Action Sync Box */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <button
                 type="button"
                 onClick={handleTestConnection}
                 disabled={isTesting}
-                className="p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left transition flex flex-col justify-between"
+                className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left transition flex flex-col justify-between cursor-pointer"
               >
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="text-xs font-bold font-['Prompt']">ทดสอบการเชื่อมต่อ</span>
+                <div className="flex items-center justify-between text-slate-700">
+                  <span className="text-xs font-bold font-['Prompt']">1. ทดสอบการเชื่อมต่อ</span>
                   {isTesting ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" /> : <RefreshCw className="w-4 h-4 text-slate-400" />}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-2">
-                  ตรวจสอบว่า Web App URL ใช้งานได้หรือไม่
+                  ตรวจว่า Web App URL เชื่อมต่อได้หรือไม่
                 </p>
               </button>
 
               <button
                 type="button"
-                onClick={handleFetchFromSheet}
-                disabled={isSyncingDown}
-                className="p-3.5 bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 rounded-xl text-left transition flex flex-col justify-between"
+                onClick={handleInitHeaders}
+                disabled={isUpdatingHeaders}
+                className="p-3 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 rounded-xl text-left transition flex flex-col justify-between cursor-pointer"
               >
-                <div className="flex items-center justify-between text-emerald-900">
-                  <span className="text-xs font-bold font-['Prompt']">ดึงข้อมูลจาก Sheet</span>
-                  {isSyncingDown ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" /> : <Download className="w-4 h-4 text-emerald-700" />}
+                <div className="flex items-center justify-between text-blue-900">
+                  <span className="text-xs font-bold font-['Prompt']">2. เพิ่มคอลัมน์หน่วยบรรจุ</span>
+                  {isUpdatingHeaders ? <Loader2 className="w-4 h-4 animate-spin text-blue-700" /> : <Table className="w-4 h-4 text-blue-700" />}
                 </div>
-                <p className="text-[11px] text-emerald-800/80 mt-2">
-                  โหลดรายการยาจาก Google Sheet ลงสู่เว็บ
+                <p className="text-[11px] text-blue-800/80 mt-2">
+                  อัปเดตหัวตาราง 19 คอลัมน์ลงใน Sheet
                 </p>
               </button>
 
@@ -264,27 +396,43 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                 type="button"
                 onClick={handleUploadAllToSheet}
                 disabled={isSyncingUp}
-                className="p-3.5 bg-teal-50/70 hover:bg-teal-100/70 border border-teal-200 rounded-xl text-left transition flex flex-col justify-between"
+                className="p-3 bg-teal-50/70 hover:bg-teal-100/70 border border-teal-200 rounded-xl text-left transition flex flex-col justify-between cursor-pointer"
               >
                 <div className="flex items-center justify-between text-teal-900">
-                  <span className="text-xs font-bold font-['Prompt']">ส่งข้อมูลขึ้น Sheet</span>
+                  <span className="text-xs font-bold font-['Prompt']">3. ส่งข้อมูลขึ้น Sheet</span>
                   {isSyncingUp ? <Loader2 className="w-4 h-4 animate-spin text-teal-700" /> : <Upload className="w-4 h-4 text-teal-700" />}
                 </div>
                 <p className="text-[11px] text-teal-800/80 mt-2">
-                  อัปโหลด {drugs.length} รายการพร้อมสถานะหมดอายุ & Min ขึ้นชีท
+                  ส่ง {drugs.length} รายการ (พร้อมหน่วยบรรจุ) ขึ้นชีท
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFetchFromSheet}
+                disabled={isSyncingDown}
+                className="p-3 bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 rounded-xl text-left transition flex flex-col justify-between cursor-pointer"
+              >
+                <div className="flex items-center justify-between text-emerald-900">
+                  <span className="text-xs font-bold font-['Prompt']">4. ดึงข้อมูลจาก Sheet</span>
+                  {isSyncingDown ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" /> : <Download className="w-4 h-4 text-emerald-700" />}
+                </div>
+                <p className="text-[11px] text-emerald-800/80 mt-2">
+                  โหลดรายการยาจาก Google Sheet ลงเว็บ
                 </p>
               </button>
             </div>
 
             {/* Status Columns Notice Banner */}
-            <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-xl text-xs space-y-1">
+            <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-xl text-xs space-y-1.5">
               <span className="font-bold text-emerald-950 font-['Prompt'] flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                <span>ใน Google Sheet จะมีคอลัมน์แสดงสถานะยาอัตโนมัติ:</span>
+                <span>คอลัมน์ใน Google Sheet (โครงสร้าง 19 คอลัมน์สมบูรณ์):</span>
               </span>
               <ul className="list-disc list-inside text-emerald-900 text-[11px] space-y-0.5 pl-1">
-                <li><strong>สถานะวันหมดอายุ (Expiry Status)</strong>: แสดงว่า "หมดอายุแล้ว", "ใกล้หมดอายุ (เหลือ X วัน)", หรือ "ปลอดภัย"</li>
-                <li><strong>สถานะสต็อก (Stock Status)</strong>: แสดงว่า "ถึงเกณฑ์ Min หรือต่ำกว่า", "สต็อกปกติ", หรือ "สต็อกเกิน Max"</li>
+                <li><strong>หน่วยบรรจุ (Package Unit)</strong>: บันทึกขนาดบรรจุ เช่น "10x10 เม็ด", "1 ขวด/กล่อง", "10 แผง/กล่อง" (คอลัมน์ L)</li>
+                <li><strong>สถานะวันหมดอายุ (Expiry Status)</strong>: "หมดอายุแล้ว", "ใกล้หมดอายุ (เหลือ X วัน)", หรือ "ปลอดภัย"</li>
+                <li><strong>สถานะสต็อก (Stock Status)</strong>: "ถึงเกณฑ์ Min หรือต่ำกว่า", "สต็อกปกติ", หรือ "สต็อกเกิน Max"</li>
                 <li><strong>สรุปการแจ้งเตือน (Alert Summary)</strong>: สรุปภาพรวมสถานะความเร่งด่วนของยาแต่ละรายการ</li>
               </ul>
             </div>
@@ -407,7 +555,190 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
           </div>
         )}
 
-        {/* Tab 3: SETUP GUIDE */}
+        {/* Tab 3: TELEGRAM BOT SETTINGS */}
+        {activeTab === 'telegram' && (
+          <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs text-slate-700">
+            {/* Status Message */}
+            {statusMessage && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                  statusMessage.success
+                    ? 'bg-sky-50 text-sky-900 border-sky-300'
+                    : 'bg-rose-50 text-rose-900 border-rose-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  {statusMessage.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-sky-600 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                  )}
+                  <span>{statusMessage.text}</span>
+                </div>
+                <button
+                  onClick={() => setStatusMessage(null)}
+                  className="text-xs opacity-60 hover:opacity-100 font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Telegram Bot Connection Status Card */}
+            <div className="p-4 bg-gradient-to-r from-sky-500/10 via-blue-500/10 to-indigo-500/10 border border-sky-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-xs">
+                  <Send className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-['Prompt'] font-bold text-sm text-sky-950 flex items-center gap-2">
+                    <span>Telegram Bot (@pharmkcsbot)</span>
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-300">
+                      🟢 เชื่อมต่อแล้ว
+                    </span>
+                  </h4>
+                  <p className="text-xs text-sky-800 mt-0.5">
+                    แชทปลายทาง: Chat ID <code>{chatId}</code> | ระบบคลังยานอก รพ.เขาชัยสน
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleTestTelegram}
+                  disabled={isTestingTelegram}
+                  className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isTestingTelegram ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <span>{isTestingTelegram ? 'กำลังทดสอบ...' : 'ทดสอบส่งข้อความ'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSendTelegramStatusReport}
+                  disabled={isSendingStatusReport}
+                  className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="ส่งสรุปยาใกล้หมดอายุ/หมดอายุ/ต่ำกว่า Min เข้า Telegram ทันที"
+                >
+                  {isSendingStatusReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4 text-emerald-300" />}
+                  <span>{isSendingStatusReport ? 'กำลังส่ง...' : 'ส่งรายงานสถานะยาทันที'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Telegram Configuration Form */}
+            <form onSubmit={handleSaveTelegram} className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <h5 className="font-bold text-slate-800 font-['Prompt'] text-xs flex items-center gap-1.5">
+                <Settings className="w-4 h-4 text-sky-700" />
+                <span>การตั้งค่า Telegram Bot & เงื่อนไขการแจ้งเตือน</span>
+              </h5>
+
+              {/* Bot Token */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Telegram Bot Token
+                </label>
+                <input
+                  type="text"
+                  value={botToken}
+                  onChange={(e) => setBotToken(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
+                  placeholder="เช่น 8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc"
+                />
+              </div>
+
+              {/* Chat ID */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Telegram Chat ID
+                </label>
+                <input
+                  type="text"
+                  value={chatId}
+                  onChange={(e) => setChatId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
+                  placeholder="เช่น 8912234135"
+                />
+              </div>
+
+              {/* Notification Checkboxes */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  ตัวเลือกการแจ้งเตือนอัตโนมัติ:
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={telegramEnabled}
+                    onChange={(e) => setTelegramEnabled(e.target.checked)}
+                    className="rounded text-sky-600 focus:ring-sky-500"
+                  />
+                  <span className="font-semibold">เปิดใช้งานการแจ้งเตือน Telegram</span>
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 pl-4">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnSave}
+                    onChange={(e) => setNotifyOnSave(e.target.checked)}
+                    disabled={!telegramEnabled}
+                    className="rounded text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>แจ้งเตือนเมื่อ <strong>เพิ่มหรือแก้ไขข้อมูลยา</strong> ในคลัง</span>
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 pl-4">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnDispense}
+                    onChange={(e) => setNotifyOnDispense(e.target.checked)}
+                    disabled={!telegramEnabled}
+                    className="rounded text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>แจ้งเตือนเมื่อ <strong>บันทึกการตัดยอดจ่ายยา</strong> ไปยังแผนกต่างๆ</span>
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 pl-4">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnStatusChange}
+                    onChange={(e) => setNotifyOnStatusChange(e.target.checked)}
+                    disabled={!telegramEnabled}
+                    className="rounded text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>แจ้งเตือนเมื่อ <strong>สถานะยาเปลี่ยน (หมดอายุ, ใกล้หมดอายุ, สต็อกถึงเกณฑ์ min)</strong></span>
+                </label>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>บันทึกการตั้งค่า Telegram</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Explanation of Integration */}
+            <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
+              <span className="font-bold text-sky-950 block text-xs">
+                🔄 การเชื่อมต่อแบบ 2 ทาง (Web ➡️ Sheet ➡️ Telegram):
+              </span>
+              <ul className="list-disc list-inside text-sky-900 text-[11px] sm:text-xs space-y-1 pl-1">
+                <li><strong>เมื่อกรอกข้อมูลบนเว็บ:</strong> ข้อมูลจะถูกบันทึกและส่งเข้า Google Sheet อัตโนมัติ พร้อมส่งข้อความแจ้งเตือนเข้า Telegram Bot (@pharmkcsbot) ทันที</li>
+                <li><strong>เมื่อแก้ไขใน Google Sheet:</strong> ในไฟล์ <code>Code.gs</code> มีฟังก์ชัน <code>checkInventoryAndNotifyTelegram()</code> ตรวจจับการเปลี่ยนแปลงของคอลัมน์สถานะ (ยกเว้นสถานะ "ปลอดภัย") แล้วส่งเข้า Telegram อัตโนมัติ</li>
+                <li><strong>การตั้งเวลาอัตโนมัติ:</strong> ใน Apps Script สามารถรันฟังก์ชัน <code>createTelegramTrigger()</code> เพื่อให้ระบบตรวจเช็คและแจ้งเตือนเข้า Telegram ทุก 1 ชั่วโมงได้</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: SETUP GUIDE */}
         {activeTab === 'guide' && (
           <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs text-slate-700 leading-relaxed">
             

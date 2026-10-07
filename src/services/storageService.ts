@@ -1,11 +1,13 @@
-import { DrugItem, DispenseRecord, GasConfig, LineConfig } from '../types/inventory';
+import { DrugItem, DispenseRecord, GasConfig, LineConfig, TelegramConfig } from '../types/inventory';
 import { INITIAL_DRUGS } from '../utils/drugUtils';
+import { DEFAULT_TELEGRAM_CONFIG } from './telegramService';
 
 const STORAGE_KEYS = {
   DRUGS: 'kcs_pharmacy_drugs_v1',
   DISPENSE_LOGS: 'kcs_pharmacy_dispense_logs_v1',
   GAS_CONFIG: 'kcs_pharmacy_gas_config_v1',
   LINE_CONFIG: 'kcs_pharmacy_line_config_v1',
+  TELEGRAM_CONFIG: 'kcs_pharmacy_telegram_config_v1',
 };
 
 export const DEFAULT_GAS_CONFIG: GasConfig = {
@@ -107,6 +109,26 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.LINE_CONFIG, JSON.stringify(config));
     } catch (e) {
       console.error('Failed to save LINE config', e);
+    }
+  },
+
+  getTelegramConfig(): TelegramConfig {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.TELEGRAM_CONFIG);
+      if (data) {
+        return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(data) };
+      }
+    } catch (e) {
+      console.error('Failed to read Telegram config', e);
+    }
+    return DEFAULT_TELEGRAM_CONFIG;
+  },
+
+  saveTelegramConfig(config: TelegramConfig): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.TELEGRAM_CONFIG, JSON.stringify(config));
+    } catch (e) {
+      console.error('Failed to save Telegram config', e);
     }
   },
 };

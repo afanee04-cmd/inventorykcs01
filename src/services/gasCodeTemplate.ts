@@ -25,6 +25,10 @@ const SHEET_NAME_CONFIG = "การตั้งค่า";
 const LINE_CHANNEL_ACCESS_TOKEN = "YOUR_LINE_CHANNEL_ACCESS_TOKEN";
 const LINE_DESTINATION_ID = "YOUR_LINE_USER_OR_GROUP_ID";
 
+// Telegram Bot Settings (เชื่อมต่อระบบคลังยานอก รพ.เขาชัยสน @pharmkcsbot)
+const TELEGRAM_BOT_TOKEN = "8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc";
+const TELEGRAM_CHAT_ID = "8912234135";
+
 // หัวตารางคลังยาแบบแสดงสถานะครบถ้วน (พร้อมหน่วยบรรจุ)
 const INVENTORY_HEADERS = [
   "รหัสยา (ID)", 
@@ -212,7 +216,15 @@ function doPost(e) {
       }
       
       formatSheetRows(sheet);
-      return createJsonResponse({ status: "success", message: "บันทึกข้อมูลและสถานะยาสำเร็จ" });
+
+      // ตรวจสอบสถานะและส่งแจ้งเตือน Telegram อัตโนมัติ
+      try {
+        checkInventoryAndNotifyTelegram();
+      } catch (tgErr) {
+        Logger.log("Telegram Error: " + tgErr);
+      }
+
+      return createJsonResponse({ status: "success", message: "บันทึกข้อมูลและสถานะยาสำเร็จ พร้อมเชื่อมต่อ Telegram" });
     }
     
     // บันทึกทั้งหมด (Sync All Items จากเว็บ) พร้อมสถานะยาลง Sheet
@@ -260,6 +272,14 @@ function doPost(e) {
       }
       
       formatSheetRows(sheet);
+
+      // ตรวจสอบสถานะและส่งแจ้งเตือน Telegram อัตโนมัติ
+      try {
+        checkInventoryAndNotifyTelegram();
+      } catch (tgErr) {
+        Logger.log("Telegram Error: " + tgErr);
+      }
+
       return createJsonResponse({ status: "success", count: items.length });
     }
     
@@ -276,7 +296,41 @@ function doPost(e) {
       }
       return createJsonResponse({ status: "not_found", message: "ไม่พบรหัสยา" });
     }
-    
+
+    // ลบหลายรายการพร้อมกัน (Bulk Delete)
+    if (action === "deleteMultiple") {
+      const ids = payload.ids || [];
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return createJsonResponse({ status: "error", message: "ไม่ได้ระบุรหัสยาที่ต้องการลบ" });
+      }
+      const idSet = {};
+      ids.forEach(function(id) { idSet[String(id)] = true; });
+      const sheet = getOrCreateSheet(ss, SHEET_NAME_INVENTORY);
+      const data = sheet.getDataRange().getValues();
+      let deletedCount = 0;
+      // ลบจากล่างขึ้นบนเพื่อรักษาตำแหน่งแถว
+      for (let i = data.length - 1; i >= 1; i--) {
+        if (idSet[String(data[i][0])]) {
+          sheet.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return createJsonResponse({ status: "success", deletedCount: deletedCount, message: "ลบรายการเรียบร้อย " + deletedCount + " รายการ" });
+    }
+
+    // อัปเดตโครงสร้างหัวตารางเป็น 19 คอลัมน์ (รวมหน่วยบรรจุ)
+    if (action === "initHeaders") {
+      const sheet = getOrCreateSheet(ss, SHEET_NAME_INVENTORY);
+      const data = sheet.getDataRange().getValues();
+      if (data.length === 0 || (data.length === 1 && data[0].length === 0)) {
+        sheet.appendRow(INVENTORY_HEADERS);
+      } else {
+        sheet.getRange(1, 1, 1, INVENTORY_HEADERS.length).setValues([INVENTORY_HEADERS]);
+      }
+      formatSheetRows(sheet);
+      return createJsonResponse({ status: "success", message: "อัปเดตหัวตาราง 19 คอลัมน์ (พร้อมหน่วยบรรจุ) เรียบร้อย" });
+    }
+
     // บันทึกการตัดยอด (Dispense) พร้อมอัปเดตสถานะคงเหลือและสถานะ Min ใน Sheet
     if (action === "dispense") {
       const record = payload.record;
@@ -286,19 +340,28 @@ function doPost(e) {
       ]);
       
       const data = invSheet.getDataRange().getValues();
-      const isNewLayout = data[0].length >= 18;
+      const is19Layout = data[0].length >= 19;
+      const is18Layout = data[0].length === 18;
       let updatedRemaining = 0;
       
       for (let i = 1; i < data.length; i++) {
         if (String(data[i][0]) === String(record.drugId)) {
-          const qtyCol = isNewLayout ? 10 : 9; // 1-based index (10 = col J)
+          const qtyCol = (is19Layout || is18Layout) ? 10 : 9; // 1-based index (10 = col J)
           const currentQty = Number(data[i][qtyCol - 1] || 0);
           updatedRemaining = Math.max(0, currentQty - Number(record.amount));
           
           invSheet.getRange(i + 1, qtyCol).setValue(updatedRemaining);
           
-          // หากเป็นเลย์เอาต์ใหม่ ให้อัปเดตสถานะสต็อกและแจ้งเตือนด้วย
-          if (isNewLayout) {
+          if (is19Layout) {
+            const expDate = data[i][7];
+            const minVal = Number(data[i][12] || 0);
+            const maxVal = Number(data[i][13] || 0);
+            const newStatus = computeDrugStatuses(expDate, updatedRemaining, minVal, maxVal);
+            
+            invSheet.getRange(i + 1, 15).setValue(newStatus.stockStatusText);
+            invSheet.getRange(i + 1, 16).setValue(newStatus.alertSummaryText);
+            invSheet.getRange(i + 1, 19).setValue(new Date().toISOString());
+          } else if (is18Layout) {
             const expDate = data[i][7];
             const minVal = Number(data[i][11] || 0);
             const maxVal = Number(data[i][12] || 0);
@@ -329,8 +392,25 @@ function doPost(e) {
         updatedRemaining,
         new Date().toISOString()
       ]);
+
+      // ตรวจสอบสถานะและส่งแจ้งเตือน Telegram อัตโนมัติหลังตัดยอด
+      try {
+        checkInventoryAndNotifyTelegram();
+      } catch (tgErr) {
+        Logger.log("Telegram Error: " + tgErr);
+      }
       
       return createJsonResponse({ status: "success", remaining: updatedRemaining });
+    }
+
+    // สั่งตรวจสอบคลังและส่งรายงาน Telegram ทันที
+    if (action === "triggerTelegram") {
+      try {
+        checkInventoryAndNotifyTelegram();
+        return createJsonResponse({ status: "success", message: "ตรวจสอบคลังและส่ง Telegram สำเร็จ" });
+      } catch (tgErr) {
+        return createJsonResponse({ status: "error", message: "Telegram Error: " + tgErr.toString() });
+      }
     }
     
     // อัปโหลดไฟล์ PDF หรือ Excel เข้า Google Drive Folder
@@ -449,23 +529,30 @@ function refreshAllStatusesInSheet() {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return 0;
   
-  const isNewLayout = data[0].length >= 18;
-  if (!isNewLayout) {
-    // ถ้ายังเป็นตารางเดิม ให้ทำการ sync ใหม่เป็น 18 คอลัมน์
+  const is19Layout = data[0].length >= 19;
+  const is18Layout = data[0].length === 18;
+  if (!is19Layout && !is18Layout) {
+    // ถ้ายังเป็นตารางเดิม ให้ทำการ sync ใหม่เป็น 19 คอลัมน์
     return 0;
   }
   
   for (let i = 1; i < data.length; i++) {
     const expDate = data[i][7];
     const qty = Number(data[i][9] || 0);
-    const minVal = Number(data[i][11] || 0);
-    const maxVal = Number(data[i][12] || 0);
+    const minVal = Number((is19Layout ? data[i][12] : data[i][11]) || 0);
+    const maxVal = Number((is19Layout ? data[i][13] : data[i][12]) || 0);
     
     const st = computeDrugStatuses(expDate, qty, minVal, maxVal);
     sheet.getRange(i + 1, 9).setValue(st.expiryStatusText);
-    sheet.getRange(i + 1, 14).setValue(st.stockStatusText);
-    sheet.getRange(i + 1, 15).setValue(st.alertSummaryText);
-    sheet.getRange(i + 1, 18).setValue(new Date().toISOString());
+    if (is19Layout) {
+      sheet.getRange(i + 1, 15).setValue(st.stockStatusText);
+      sheet.getRange(i + 1, 16).setValue(st.alertSummaryText);
+      sheet.getRange(i + 1, 19).setValue(new Date().toISOString());
+    } else {
+      sheet.getRange(i + 1, 14).setValue(st.stockStatusText);
+      sheet.getRange(i + 1, 15).setValue(st.alertSummaryText);
+      sheet.getRange(i + 1, 18).setValue(new Date().toISOString());
+    }
   }
   
   formatSheetRows(sheet);
@@ -546,7 +633,8 @@ function dailyAutoCheckAndNotifyLine() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  const isNewLayout = data[0].length >= 18;
+  const is19Layout = data[0].length >= 19;
+  const is18Layout = data[0].length === 18;
   const expiredItems = [];
   const nearExpiryItems = [];
   const lowStockItems = [];
@@ -558,9 +646,9 @@ function dailyAutoCheckAndNotifyLine() {
     const lot = row[3];
     const subWarehouse = row[6];
     const expiryStr = row[7];
-    const qty = Number((isNewLayout ? row[9] : row[8]) || 0);
-    const unit = String((isNewLayout ? row[10] : row[9]) || "เม็ด");
-    const minVal = Number((isNewLayout ? row[11] : row[10]) || 0);
+    const qty = Number((is19Layout || is18Layout ? row[9] : row[8]) || 0);
+    const unit = String((is19Layout || is18Layout ? row[10] : row[9]) || "เม็ด");
+    const minVal = Number((is19Layout ? row[12] : (is18Layout ? row[11] : row[10])) || 0);
     
     if (!name) continue;
     
@@ -629,6 +717,160 @@ function createDailyTrigger() {
     .create();
     
   Logger.log("ติดตั้ง Trigger แจ้งเตือน 08:00 น. เรียบร้อยแล้ว");
+}
+
+/**
+ * ========================================================
+ * ระบบแจ้งเตือน TELEGRAM BOT (@pharmkcsbot)
+ * ตรวจสอบความเปลี่ยนแปลงของสถานะยาในชีท และส่งข้อความเข้า Telegram
+ * ========================================================
+ */
+function checkInventoryAndNotifyTelegram() {
+  // --- ข้อมูล Telegram Bot ---
+  var token = TELEGRAM_BOT_TOKEN;
+  var chatId = TELEGRAM_CHAT_ID;
+  
+  // --- เปิด Google Sheet ตาม ID ที่ระบุ ---
+  var spreadsheetId = SPREADSHEET_ID;
+  var sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(SHEET_NAME_INVENTORY) || SpreadsheetApp.openById(spreadsheetId).getSheets()[0];
+  var dataRange = sheet.getDataRange();
+  var values = dataRange.getValues();
+  
+  if (values.length <= 1) return;
+
+  // ค้นหา Column สถานะโดยอัตโนมัติ (รองรับทั้งชีท 14 คอลัมน์, 18 คอลัมน์ และ 19 คอลัมน์)
+  var statusColIndex = 13; // ค่าเริ่มต้น Column N (Index = 13)
+  for (var c = 0; c < values[0].length; c++) {
+    var h = String(values[0][c] || "");
+    if (h.indexOf("สถานะ (ปลอดภัย") >= 0 || h === "สถานะ" || h.indexOf("สถานะ") >= 0) {
+      statusColIndex = c;
+      break;
+    }
+  }
+
+  var alerts = [];
+  
+  // ใช้ Document Properties เพื่อจำสถานะเก่าของแต่ละแถว
+  var properties = PropertiesService.getDocumentProperties();
+  
+  // วนลูปตรวจสอบข้อมูลแต่ละแถว (เริ่มจากแถวที่ 2 เพื่อข้ามหัวตาราง Header)
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var status = String(row[statusColIndex] || "").trim();
+    
+    // ถ้าช่องสถานะว่าง ให้ข้าม
+    if (!status) continue;
+    
+    var propertyKey = "row_" + (i + 1); // ใช้แถวที่ในชีทเป็น Key อ้างอิง
+    var previousStatus = properties.getProperty(propertyKey) || "";
+    
+    // 1. ตรวจสอบว่า "สถานะมีการเปลี่ยนแปลง" จากรอบที่แล้วหรือไม่
+    if (status !== previousStatus) {
+      
+      // บันทึกสถานะใหม่เก็บไว้ทันที
+      properties.setProperty(propertyKey, status);
+      
+      // 2. เงื่อนไข: แจ้งเตือนทุกสถานะ ยกเว้นสถานะ "ปลอดภัย"
+      if (status !== "ปลอดภัย" && status.indexOf("ปลอดภัย") < 0) {
+        
+        // ดึงข้อมูลและป้องกัน Error จากอักขระพิเศษ HTML
+        var itemName = escapeHtml(row[1]);     // Column B: ชื่อยา
+        var lot = escapeHtml(row[3]);          // Column D: Lot
+        var source = escapeHtml(row[5]);       // Column F: แหล่งที่มา
+        var subWarehouse = escapeHtml(row[6]); // Column G: คลังยาย่อย
+        
+        // กำหนด Emoji ตามสถานะ
+        var emoji = "⚠️";
+        if (status === "หมดอายุ" || status.indexOf("หมดอายุแล้ว") >= 0) emoji = "❌";
+        else if (status === "ใกล้หมดอายุ" || status.indexOf("ใกล้หมดอายุ") >= 0) emoji = "⚠️";
+        else if (status === "สต็อกถึงเกณฑ์ min" || status.indexOf("ถึงเกณฑ์ Min") >= 0) emoji = "🔔";
+        
+        // จัดรูปแบบข้อความตามลำดับที่ต้องการ
+        var message = emoji + " <b>สถานะ:</b> " + status + "\\n" +
+                      "• <b>ชื่อยา:</b> " + itemName + "\\n" +
+                      "• <b>Lot:</b> " + lot + "\\n" +
+                      "• <b>คลังยาย่อย:</b> " + subWarehouse + "\\n" +
+                      "• <b>แหล่งที่มา:</b> " + source + "\\n" +
+                      "• <b>แถวที่:</b> " + (i + 1);
+                      
+        alerts.push(message);
+      }
+    }
+  }
+  
+  // หากมีรายการที่เปลี่ยนแปลงและตรงตามเงื่อนไข ให้ส่งเข้า Telegram
+  if (alerts.length > 0) {
+    var header = "<b>📦 รายงานการเปลี่ยนแปลงสถานะยาและเวชภัณฑ์ (รพ.เขาชัยสน)</b>\\n\\n";
+    var batchSize = 10; // ส่งทีละ 10 รายการเพื่อป้องกันข้อความยาวเกินไป
+    
+    for (var j = 0; j < alerts.length; j += batchSize) {
+      var chunk = alerts.slice(j, j + batchSize);
+      var fullMessage = header + chunk.join("\\n\\n-------------------\\n\\n");
+      sendToTelegram(token, chatId, fullMessage);
+      
+      // หน่วงเวลาเล็กน้อยป้องกัน Telegram บล็อคข้อความส่งถี่
+      Utilities.sleep(500);
+    }
+  } else {
+    Logger.log("ไม่มีสถานะที่เปลี่ยนแปลงจากรอบก่อนหน้า");
+  }
+}
+
+// ฟังก์ชันแปลงอักขระพิเศษ HTML ป้องกัน Error ตอนส่งข้อความ
+function escapeHtml(text) {
+  if (!text) return "-";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ฟังก์ชันส่ง HTTP Request ไปยัง Telegram API พร้อมระบบจับ Error Log
+function sendToTelegram(token, chatId, message) {
+  var url = "https://api.telegram.org/bot" + token + "/sendMessage";
+  var payload = {
+    "chat_id": chatId,
+    "text": message,
+    "parse_mode": "HTML"
+  };
+  
+  var options = {
+    "method": "post",
+    "contentType": "application/json",
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+  
+  try {
+    var response = UrlFetchApp.fetch(url, options);
+    var responseCode = response.getResponseCode();
+    var content = response.getContentText();
+    
+    if (responseCode !== 200) {
+      Logger.log("Telegram API Error (" + responseCode + "): " + content);
+    }
+  } catch (error) {
+    Logger.log("Script Fetch Error: " + error.toString());
+  }
+}
+
+/**
+ * ติดตั้ง Trigger ตรวจสอบและส่ง Telegram อัตโนมัติทุก 1 ชั่วโมง
+ */
+function createTelegramTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "checkInventoryAndNotifyTelegram") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  
+  ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
+    .timeBased()
+    .everyHours(1)
+    .create();
+    
+  Logger.log("ติดตั้ง Trigger Telegram เรียบร้อยแล้ว");
 }
 
 // Helpers

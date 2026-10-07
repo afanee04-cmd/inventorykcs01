@@ -1,7 +1,96 @@
 import { DrugItem, DispenseRecord, GasConfig } from '../types/inventory';
 import { getDrugStatus, getSimpleDrugStatus, parseUnitAndPackage, formatUnitForSheet } from '../utils/drugUtils';
 
+/**
+ * วิเคราะห์และตรวจสอบผลการตอบกลับจาก Google Apps Script อย่างละเอียด
+ * ป้องกันการแสดงผลว่าสำเร็จทั้งที่ Google ตอบกลับเป็น Error HTML / Script function not found
+ */
+export function parseGasResponse(resText: string): { success: boolean; data?: any; error?: string } {
+  if (!resText || !resText.trim()) {
+    return { success: false, error: 'ไม่ได้รับการตอบกลับจากเซิร์ฟเวอร์ Google Apps Script' };
+  }
+
+  // 1. ตรวจสอบกรณี Google Apps Script แจ้งว่าไม่พบฟังก์ชัน doGet หรือ doPost
+  if (resText.includes('Script function not found: doGet') || resText.includes('Script function not found: doPost')) {
+    return {
+      success: false,
+      error: 'Google Apps Script แจ้ง: "Script function not found (doGet/doPost)" — โค้ดใน Code.gs ยังไม่ได้ถูกบันทึก หรือยังไม่ได้กด Deploy เวอร์ชันใหม่ (Manage deployments > Edit > New version)',
+    };
+  }
+
+  if (resText.includes('Script function not found')) {
+    return {
+      success: false,
+      error: 'Google Apps Script แจ้ง: "Script function not found" — กรุณานำโค้ด Code.gs ไปวางใน Apps Script และกด Deploy -> New version',
+    };
+  }
+
+  // 2. ตรวจสอบกรณีสิทธิ์การเข้าถึง (ต้องตั้ง Deploy เป็น Anyone)
+  if (
+    resText.includes('accounts.google.com') ||
+    resText.includes('Sign in') ||
+    resText.includes('Authorization is required') ||
+    resText.includes('Sign in with Google')
+  ) {
+    return {
+      success: false,
+      error: 'Google Apps Script แจ้งสิทธิ์เข้าถึง: กรุณาตั้งค่า Deploy Web App ตรง "Who has access" (ผู้มีสิทธิ์เข้าถึง) ให้เป็น "Anyone" (ทุกคน)',
+    };
+  }
+
+  // 3. ตรวจสอบ JSON ปกติ
+  try {
+    const json = JSON.parse(resText);
+    if (json.status === 'success') {
+      return { success: true, data: json };
+    }
+    return { success: false, error: json.message || 'Google Apps Script รายงานข้อผิดพลาด' };
+  } catch {
+    // 4. กรณีเป็นหน้า HTML ผิดพลาดของ Google
+    if (resText.startsWith('<!DOCTYPE html>') || resText.includes('<html')) {
+      const titleMatch = resText.match(/<title>([^<]+)<\/title>/i);
+      const title = titleMatch ? titleMatch[1].trim() : 'Google Error';
+      return {
+        success: false,
+        error: `Google Apps Script ตอบกลับเป็นหน้าข้อผิดพลาด (${title}) — กรุณาตรวจสอบว่าวางโค้ดใน Code.gs ครบถ้วนและ Deploy New Version หรือยัง`,
+      };
+    }
+    return { success: false, error: resText.slice(0, 150) };
+  }
+}
+
 export const GasApiService = {
+  /**
+   * ทดสอบการเชื่อมต่อ Google Apps Script อย่างละเอียด
+   */
+  async testConnection(config: GasConfig): Promise<{ success: boolean; message: string; details?: any }> {
+    if (!config.scriptUrl) {
+      return { success: false, message: 'ยังไม่ได้ระบุ Web App URL ของ Google Apps Script' };
+    }
+
+    try {
+      const url = `${config.scriptUrl}${config.scriptUrl.includes('?') ? '&' : '?'}action=test&sheetId=${encodeURIComponent(config.sheetId)}&t=${Date.now()}`;
+      const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+      const text = await res.text();
+      const parsed = parseGasResponse(text);
+
+      if (!parsed.success) {
+        return { success: false, message: parsed.error || 'ทดสอบเชื่อมต่อไม่สำเร็จ' };
+      }
+
+      return {
+        success: true,
+        message: 'เชื่อมต่อ Google Apps Script สำเร็จสมบูรณ์ พร้อมรับส่งข้อมูลกับ Google Sheet',
+        details: parsed.data,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `เชื่อมต่อไม่สำเร็จ (${err.message || 'Network/CORS error'}): กรุณาตรวจสอบว่าเปิด Deploy เป็น Anyone (ทุกคน) หรือยัง`,
+      };
+    }
+  },
+
   /**
    * ดึงข้อมูลยาจาก Google Apps Script (doGet)
    */
@@ -17,12 +106,15 @@ export const GasApiService = {
         redirect: 'follow',
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const resText = await response.text();
+      const parsed = parseGasResponse(resText);
+
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
       }
 
-      const data = await response.json();
-      if (data.status === 'success' && Array.isArray(data.items)) {
+      const data = parsed.data;
+      if (Array.isArray(data?.items)) {
         const normalizedItems: DrugItem[] = data.items.map((i: any) => {
           const { unit, packageUnit } = parseUnitAndPackage(i.unit, i.packageUnit);
           return {
@@ -33,10 +125,10 @@ export const GasApiService = {
         });
         return { success: true, items: normalizedItems };
       } else {
-        return { success: false, error: data.message || 'ไม่พบรายการข้อมูลใน Sheet' };
+        return { success: false, error: data?.message || 'ไม่พบรายการข้อมูลใน Sheet' };
       }
     } catch (err: any) {
-      console.warn('GAS fetch error (may require Web App deploy with "Anyone" access):', err);
+      console.warn('GAS fetch error:', err);
       return {
         success: false,
         error: `การเชื่อมต่อขัดข้อง: ${err.message || 'CORS/Network error'} (กรุณาตรวจสอบว่าตั้งสิทธิ์ Deploy เป็น Anyone หรือยัง)`,
@@ -120,11 +212,9 @@ export const GasApiService = {
       });
 
       const resText = await response.text();
-      let resJson: any;
-      try {
-        resJson = JSON.parse(resText);
-      } catch {
-        resJson = { status: 'success' };
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
       }
 
       return { success: true };
@@ -182,11 +272,17 @@ export const GasApiService = {
         item: enrichedItem,
       };
 
-      await fetch(config.scriptUrl, {
+      const res = await fetch(config.scriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
+
+      const resText = await res.text();
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
+      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -206,11 +302,76 @@ export const GasApiService = {
         id: id,
       };
 
-      await fetch(config.scriptUrl, {
+      const res = await fetch(config.scriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
+
+      const resText = await res.text();
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * ลบหลายรายการพร้อมกัน (Bulk Delete)
+   */
+  async deleteMultipleItemsFromGas(config: GasConfig, ids: string[]): Promise<{ success: boolean; error?: string; count?: number }> {
+    if (!config.scriptUrl) return { success: false, error: 'URL not set' };
+
+    try {
+      const payload = {
+        action: 'deleteMultiple',
+        sheetId: config.sheetId,
+        ids: ids,
+      };
+
+      const res = await fetch(config.scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+      });
+
+      const resText = await res.text();
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
+      }
+      return { success: true, count: parsed.data?.deletedCount ?? ids.length };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * อัปเดตหัวตารางในชีทให้เป็น 19 คอลัมน์ (เพิ่มหน่วยบรรจุ)
+   */
+  async initHeadersInGas(config: GasConfig): Promise<{ success: boolean; error?: string }> {
+    if (!config.scriptUrl) return { success: false, error: 'URL not set' };
+
+    try {
+      const payload = {
+        action: 'initHeaders',
+        sheetId: config.sheetId,
+      };
+
+      const res = await fetch(config.scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+      });
+
+      const resText = await res.text();
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
+      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -230,11 +391,17 @@ export const GasApiService = {
         record: record,
       };
 
-      await fetch(config.scriptUrl, {
+      const res = await fetch(config.scriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
+
+      const resText = await res.text();
+      const parsed = parseGasResponse(resText);
+      if (!parsed.success) {
+        return { success: false, error: parsed.error };
+      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };

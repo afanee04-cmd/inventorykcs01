@@ -44,6 +44,16 @@ export interface LineConfig {
   lastAlertSentAt: string | null;
 }
 
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+  enabled: boolean;
+  notifyOnSave: boolean;
+  notifyOnDispense: boolean;
+  notifyOnStatusChange: boolean;
+  lastAlertSentAt: string | null;
+}
+
 export interface GasConfig {
   sheetId: string;
   scriptUrl: string;
