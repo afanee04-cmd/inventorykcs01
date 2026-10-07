@@ -55,6 +55,7 @@ export default function App() {
   const [gasConfig, setGasConfig] = useState<GasConfig>(() => StorageService.getGasConfig() || GAS_CONFIG);
 
   const [deleteConfirmDrug, setDeleteConfirmDrug] = useState<DrugItem | null>(null);
+  const [bulkDeleteDrugs, setBulkDeleteDrugs] = useState<DrugItem[] | null>(null);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -180,6 +181,27 @@ export default function App() {
     StorageService.saveDrugs(updatedDrugs);
     setDeleteConfirmDrug(null);
     showToast('info', `ลบรายการยา "${targetName}" ออกจากคลังแล้ว (อัปเดตชีทอัตโนมัติ)`);
+
+    // Auto-sync directly to Google Sheet in background
+    autoPushToSheet(updatedDrugs);
+  };
+
+  // Bulk Delete Drugs - Auto syncs to Google Sheet
+  const handleOpenBulkDelete = (selectedDrugs: DrugItem[]) => {
+    if (!selectedDrugs || selectedDrugs.length === 0) return;
+    setBulkDeleteDrugs(selectedDrugs);
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (!bulkDeleteDrugs || bulkDeleteDrugs.length === 0) return;
+    const idsToDelete = new Set(bulkDeleteDrugs.map((d) => d.id));
+    const count = bulkDeleteDrugs.length;
+
+    const updatedDrugs = drugs.filter((d) => !idsToDelete.has(d.id));
+    setDrugs(updatedDrugs);
+    StorageService.saveDrugs(updatedDrugs);
+    setBulkDeleteDrugs(null);
+    showToast('info', `ลบรายการยาที่เลือก ${count} รายการ เรียบร้อยแล้ว (อัปเดตชีทอัตโนมัติ)`);
 
     // Auto-sync directly to Google Sheet in background
     autoPushToSheet(updatedDrugs);
@@ -347,6 +369,7 @@ export default function App() {
           }}
           onEditDrug={handleOpenEdit}
           onDeleteDrug={(drug) => setDeleteConfirmDrug(drug)}
+          onDeleteMultipleDrugs={handleOpenBulkDelete}
           onDispenseDrug={handleOpenDispense}
           onOpenImportModal={() => setIsImportModalOpen(true)}
           onExportExcel={() => exportDrugsToExcel(drugs)}
@@ -487,6 +510,66 @@ export default function App() {
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
               >
                 ยืนยันการลบรายการ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Bulk Delete Confirmation Dialog (ลบหลายรายการพร้อมกัน) */}
+      {bulkDeleteDrugs && bulkDeleteDrugs.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2.5 bg-rose-100 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 font-['Prompt']">
+                  ยืนยันการลบรายการยา {bulkDeleteDrugs.length} รายการ
+                </h3>
+                <p className="text-xs text-slate-500">การกระทำนี้จะลบรายการยาที่เลือกทั้งหมดและอัปเดต Google Sheet อัตโนมัติ</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              คุณกำลังจะลบรายการยาทั้งหมด <strong>{bulkDeleteDrugs.length} รายการ</strong> ดังต่อไปนี้:
+            </p>
+
+            <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-50 p-2">
+              {bulkDeleteDrugs.map((d) => (
+                <div key={d.id} className="py-2 px-2 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 truncate">{d.name}</div>
+                    <div className="text-[11px] text-slate-500">
+                      Shelf: <strong>{d.shelf}</strong> | Lot: <strong>{d.lot}</strong> | คลัง: <strong>{d.subWarehouse}</strong>
+                    </div>
+                  </div>
+                  <span className="font-bold text-slate-800 whitespace-nowrap text-right">
+                    {d.quantity.toLocaleString()} {d.unit}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-rose-600 font-medium">
+              * ข้อมูลจะถูกลบออกจากระบบและ Google Sheet ทันทีโดยไม่สามารถย้อนกลับได้
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setBulkDeleteDrugs(null)}
+                className="px-4 py-2 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition cursor-pointer"
+              >
+                ยืนยันการลบ {bulkDeleteDrugs.length} รายการ
               </button>
             </div>
           </div>

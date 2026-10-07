@@ -164,14 +164,104 @@ export function parseSource(val: any, companyVal?: any): SourceType {
 }
 
 /**
- * ระบุคลังย่อยอย่างแม่นยำ
+ * ระบุคลังย่อยอย่างแม่นยำ (OPD / IPD / ER / คลังใหญ่)
+ * ตรวจสอบทั้งจากคอลัมน์คลังย่อย, Shelf, เซลล์ในแถว, และชื่อ Sheet
  */
-export function parseSubWarehouse(val: any, shelfVal?: any): SubWarehouse {
-  const str = String(val || '').toUpperCase().trim();
-  const shelf = String(shelfVal || '').toUpperCase().trim();
-  if (str.includes('IPD') || str.includes('ผู้ป่วยใน') || shelf.includes('IPD')) return 'IPD';
-  if (str.includes('ER') || str.includes('ฉุกเฉิน') || shelf.includes('ER')) return 'ER';
-  if (str.includes('คลังใหญ่') || str.includes('MAIN') || str.includes('คลังกลาง') || shelf.includes('MAIN')) return 'คลังใหญ่ (Main)';
+export function parseSubWarehouse(val: any, shelfVal?: any, rowCells?: any[], sheetName?: string): SubWarehouse {
+  const checkStr = (input: any): SubWarehouse | null => {
+    if (input === null || input === undefined || input === '') return null;
+    const s = String(input).trim();
+    if (!s) return null;
+    const upper = s.toUpperCase();
+
+    // 1. IPD (ผู้ป่วยใน / หอผู้ป่วย / วอร์ด / Ward / ICU / CCU / LR / Inpatient)
+    if (
+      /\bIPD\b/.test(upper) ||
+      upper === 'IPD' ||
+      s.includes('ผู้ป่วยใน') ||
+      s.includes('หอผู้ป่วย') ||
+      s.includes('วอร์ด') ||
+      /\bWARD\b/.test(upper) ||
+      /\bINPATIENT\b/.test(upper) ||
+      /\bICU\b/.test(upper) ||
+      /\bCCU\b/.test(upper) ||
+      s.includes('ห้องคลอด') ||
+      s.includes('ตึกผู้ป่วย') ||
+      s.includes('ตึกสามัญ') ||
+      s.includes('ตึกพิเศษ')
+    ) {
+      return 'IPD';
+    }
+
+    // 2. ER (ฉุกเฉิน / อุบัติเหตุ / Emergency / ER)
+    // ตรวจสอบแบบ word boundary หรือ exact match เพื่อไม่ให้ชนกับคำอังกฤษ เช่น order, water, powder, number, supplier
+    if (
+      /\bER\b/.test(upper) ||
+      upper === 'ER' ||
+      s.includes('ฉุกเฉิน') ||
+      s.includes('อุบัติเหตุ') ||
+      /\bEMERGENCY\b/.test(upper) ||
+      s.includes('ห้องฉุกเฉิน') ||
+      s.includes('จุดตรวจฉุกเฉิน') ||
+      s.includes('หน่วยฉุกเฉิน') ||
+      s.includes('ห้องอุบัติเหตุ')
+    ) {
+      return 'ER';
+    }
+
+    // 3. คลังใหญ่ (Main / คลังกลาง / คลังยาใหญ่)
+    if (
+      s.includes('คลังใหญ่') ||
+      /\bMAIN\b/.test(upper) ||
+      upper === 'MAIN' ||
+      s.includes('คลังกลาง') ||
+      s.includes('คลังยาใหญ่') ||
+      s.includes('คลังเวชภัณฑ์')
+    ) {
+      return 'คลังใหญ่ (Main)';
+    }
+
+    // 4. OPD (ผู้ป่วยนอก / OPD / Outpatient / ห้องยาผู้ป่วยนอก)
+    if (
+      /\bOPD\b/.test(upper) ||
+      upper === 'OPD' ||
+      s.includes('ผู้ป่วยนอก') ||
+      /\bOUTPATIENT\b/.test(upper) ||
+      s.includes('ห้องยาผู้ป่วยนอก')
+    ) {
+      return 'OPD';
+    }
+
+    return null;
+  };
+
+  // 1. ตรวจสอบจากค่าในคอลัมน์คลังย่อยโดยตรง
+  const fromVal = checkStr(val);
+  if (fromVal) return fromVal;
+
+  // 2. ตรวจสอบจากค่า Shelf (เช่น "ER-01", "C1-IPD", "ตู้ยาฉุกเฉิน")
+  const fromShelf = checkStr(shelfVal);
+  if (fromShelf) return fromShelf;
+
+  // 3. ตรวจสอบจากทุกเซลล์ในแถวนั้น (ข้ามสตริงยาวเกิน 25 ตัวอักษรเพื่อไม่ให้ชนกับชื่อยาหรือหมายเหตุ)
+  if (Array.isArray(rowCells)) {
+    for (const cell of rowCells) {
+      if (cell === null || cell === undefined || cell === '') continue;
+      if (typeof cell === 'number') continue;
+      const strCell = String(cell).trim();
+      if (strCell.length > 25) continue;
+      const fromCell = checkStr(strCell);
+      if (fromCell) return fromCell;
+    }
+  }
+
+  // 4. ตรวจสอบจากชื่อ Sheet (เช่น Sheet ชื่อ "ER", "IPD", "OPD")
+  if (sheetName) {
+    const fromSheet = checkStr(sheetName);
+    if (fromSheet) return fromSheet;
+  }
+
+  // ค่าเริ่มต้นถ้าหาไม่พบเลย
   return 'OPD';
 }
 
@@ -304,11 +394,24 @@ export async function parseExcelFile(file: File): Promise<ParsedImportRow[]> {
           String(h || '').trim().toLowerCase().replace(/[\r\n\t*]/g, ' ')
         );
 
-        // หาตำแหน่งคอลัมน์แบบยืดหยุ่นสูง (รองรับหลายชื่อเรียกทั้งไทยและอังกฤษ)
-        const findColIndex = (keywords: string[]) => {
-          return headerRow.findIndex((col: string) => 
-            keywords.some(kw => col.includes(kw.toLowerCase()))
-          );
+        // หาตำแหน่งคอลัมน์แบบยืดหยุ่นสูง (รองรับหลายชื่อเรียกทั้งไทยและอังกฤษ พร้อมตัดคำที่อาจชนกัน)
+        const findColIndex = (keywords: string[], negativeKeywords?: string[], exactTokens?: string[]) => {
+          return headerRow.findIndex((col: string) => {
+            if (!col) return false;
+            // ตรวจสอบคำที่ไม่ต้องการก่อน
+            if (negativeKeywords && negativeKeywords.some(neg => col.includes(neg.toLowerCase()))) {
+              return false;
+            }
+            // ตรวจสอบคำย่อสั้นๆ ด้วย Word Boundary (เช่น 'er', 'ipd', 'opd') ป้องกันการชนกับคำว่า order, number, supplier
+            if (exactTokens && exactTokens.some(tok => {
+              const regex = new RegExp(`(^|[^a-zA-Z0-9ก-๙])${tok}([^a-zA-Z0-9ก-๙]|$)`, 'i');
+              return regex.test(col);
+            })) {
+              return true;
+            }
+            // ตรวจสอบคำค้นทั่วไป
+            return keywords.some(kw => col.includes(kw.toLowerCase()));
+          });
         };
 
         const idxId = findColIndex(['รหัสยา', 'code', 'id', 'drug_id', 'item_id', 'drugcode', 'itemcode', 'รหัสสินค้า', 'รหัสเวชภัณฑ์', 'barcode']);
@@ -317,7 +420,17 @@ export async function parseExcelFile(file: File): Promise<ParsedImportRow[]> {
         const idxLot = findColIndex(['lot', 'batch', 'รุ่น', 'เลขที่ผลิต', 'lot no', 'lotno', 'batch no', 'batchno', 'เลขล็อต', 'รุ่นที่ผลิต', 'lot_no', 'batch_no']);
         const idxCompany = findColIndex(['บริษัท', 'company', 'manufacturer', 'ผู้ผลิต', 'ผู้จำหน่าย', 'vendor', 'supplier', 'บ.', 'ตัวแทน', 'บจก']);
         const idxSource = findColIndex(['แหล่ง', 'source', 'ที่มา', 'จัดซื้อ', 'งบ', 'ประเภทการจัดซื้อ', 'แหล่งที่มา']);
-        const idxSubWh = findColIndex(['คลังย่อย', 'sub', 'warehouse', 'คลัง', 'แผนก', 'ward', 'จุดเก็บ', 'จุดบริการ', 'หน่วยงาน']);
+        // สำหรับคลังย่อย: ตรวจสอบอย่างละเอียด พร้อมป้องกันการชนกับ "คงคลัง", "ยอด", "supplier", "order"
+        let idxSubWh = findColIndex(
+          [
+            'คลังย่อย', 'คลัง', 'ประเภทคลัง', 'คลังยา', 'ห้องยา', 'แผนก', 'หน่วยงาน', 'จุดบริการ', 
+            'ตึก', 'วอร์ด', 'หอผู้ป่วย', 'จุดจ่าย', 'ห้องจ่าย', 'หน่วยเบิก', 'คลังเบิก', 'จุดเบิก',
+            'department', 'dept', 'sub-warehouse', 'subwarehouse', 'sub warehouse', 'sub_warehouse',
+            'subwh', 'warehouse', 'opd/ipd/er', 'opd / ipd / er', 'opd/er/ipd', 'opd/ipd', 'er/opd/ipd'
+          ],
+          ['คงคลัง', 'ยอด', 'จำนวน', 'qty', 'quantity', 'สต็อก', 'balance', 'remain', 'shelf', 'lot', 'ราคา', 'price', 'cost', 'มูลค่า', 'company', 'บริษัท', 'supplier', 'order', 'number'],
+          ['opd', 'ipd', 'er', 'wh', 'ward', 'dept']
+        );
         const idxExpiry = findColIndex(['วันหมดอายุ', 'หมดอายุ', 'exp', 'expiry', 'ed', 'exp_date', 'expdate', 'expiration', 'วันที่หมดอายุ', 'วันสิ้นอายุ', 'expire']);
         const idxQty = findColIndex(['จำนวนคงเหลือ', 'คงเหลือ', 'จำนวน', 'qty', 'quantity', 'ยอดคงเหลือ', 'ยอด', 'สต็อก', 'balance', 'remain', 'on hand', 'onhand', 'ยอดรวม', 'ปริมาณ', 'คงคลัง', 'stock']);
         const idxUnit = findColIndex(['หน่วยนับย่อย', 'หน่วยย่อย', 'หน่วยนับ', 'หน่วย', 'unit', 'uom', 'หน่วยเล็ก']);
@@ -326,6 +439,41 @@ export async function parseExcelFile(file: File): Promise<ParsedImportRow[]> {
         const idxMax = findColIndex(['max', 'สูงสุด', 'เกณฑ์สูง', 'max stock', 'maximum', 'เกณฑ์ max']);
         const idxReceived = findColIndex(['วันที่รับ', 'รับเข้า', 'รับ', 'received', 'date_in', 'วันที่รับเข้า', 'receive date', 'วันรับยา']);
         const idxNotes = findColIndex(['หมายเหตุ', 'note', 'remark', 'remarks', 'สถานะ', 'comment', 'รายละเอียดเพิ่มเติม']);
+
+        // ระบบตรวจจับคอลัมน์คลังย่อยอัตโนมัติจากเนื้อหาแถว (ถ้าหัวตารางไม่ระบุชัดเจน)
+        if (idxSubWh === -1 && bestRows.length > headerRowIndex + 1) {
+          const sampleRows = bestRows.slice(headerRowIndex + 1, Math.min(bestRows.length, headerRowIndex + 30));
+          const maxCols = Math.max(...sampleRows.map(r => Array.isArray(r) ? r.length : 0));
+          let bestCol = -1;
+          let bestWhCount = 0;
+
+          for (let c = 0; c < maxCols; c++) {
+            // ข้ามคอลัมน์ที่เป็นชื่อยา, id, lot, วันหมดอายุ, หรือจำนวนอยู่แล้ว
+            if (c === idxName || c === idxId || c === idxLot || c === idxExpiry || c === idxQty) continue;
+
+            let whMatches = 0;
+            for (const sr of sampleRows) {
+              if (!sr || !Array.isArray(sr)) continue;
+              const cellStr = String(sr[c] || '').trim().toUpperCase();
+              if (
+                cellStr === 'OPD' || cellStr === 'IPD' || cellStr === 'ER' ||
+                cellStr.includes('ผู้ป่วยนอก') || cellStr.includes('ผู้ป่วยใน') || cellStr.includes('ฉุกเฉิน') ||
+                cellStr.includes('หอผู้ป่วย') || cellStr.includes('วอร์ด') || cellStr === 'WARD'
+              ) {
+                whMatches++;
+              }
+            }
+
+            if (whMatches > bestWhCount) {
+              bestWhCount = whMatches;
+              bestCol = c;
+            }
+          }
+
+          if (bestWhCount >= 1) {
+            idxSubWh = bestCol;
+          }
+        }
 
         const parsedList: ParsedImportRow[] = [];
 
@@ -362,9 +510,9 @@ export async function parseExcelFile(file: File): Promise<ParsedImportRow[]> {
           const rawLot = idxLot !== -1 && row[idxLot] ? String(row[idxLot]).trim() : 'LOT-' + Date.now().toString().slice(-4);
           const rawCompany = idxCompany !== -1 && row[idxCompany] ? String(row[idxCompany]).trim() : 'องค์การเภสัชกรรม (GPO)';
 
-          // 4. Source & SubWarehouse
+          // 4. Source & SubWarehouse (ส่งชื่อ Sheet ด้วยเพื่อให้ตรวจสอบคลังของทั้งชีทได้)
           const rawSource = parseSource(idxSource !== -1 ? row[idxSource] : '', rawCompany);
-          const rawSubWh = parseSubWarehouse(idxSubWh !== -1 ? row[idxSubWh] : '', rawShelf);
+          const rawSubWh = parseSubWarehouse(idxSubWh !== -1 ? row[idxSubWh] : '', rawShelf, row, bestSheetName);
 
           // 5. วันหมดอายุ
           const expCell = idxExpiry !== -1 ? row[idxExpiry] : undefined;

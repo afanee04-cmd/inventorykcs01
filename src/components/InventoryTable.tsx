@@ -27,6 +27,7 @@ interface InventoryTableProps {
   onAddDrug: () => void;
   onEditDrug: (drug: DrugItem) => void;
   onDeleteDrug: (drug: DrugItem) => void;
+  onDeleteMultipleDrugs?: (drugs: DrugItem[]) => void;
   onDispenseDrug: (drug: DrugItem) => void;
   onOpenImportModal: () => void;
   onExportExcel: () => void;
@@ -41,6 +42,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   onAddDrug,
   onEditDrug,
   onDeleteDrug,
+  onDeleteMultipleDrugs,
   onDispenseDrug,
   onOpenImportModal,
   onExportExcel,
@@ -53,6 +55,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   const [sortField, setSortField] = useState<'name' | 'expiryDate' | 'quantity' | 'daysLeft'>('daysLeft');
   const [sortAsc, setSortAsc] = useState(true);
   const [copiedSheetNotice, setCopiedSheetNotice] = useState(false);
+  const [selectedDrugIds, setSelectedDrugIds] = useState<Set<string>>(new Set());
 
   // กรองข้อมูล
   const filteredDrugs = useMemo(() => {
@@ -124,6 +127,26 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     } else {
       setSortField(field);
       setSortAsc(true);
+    }
+  };
+
+  const toggleSelectDrug = (id: string) => {
+    const next = new Set(selectedDrugIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedDrugIds(next);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDrugIds.size === sortedDrugs.length && sortedDrugs.length > 0) {
+      setSelectedDrugIds(new Set());
+    } else {
+      const all = new Set<string>();
+      sortedDrugs.forEach((d) => all.add(d.id));
+      setSelectedDrugIds(all);
     }
   };
 
@@ -369,9 +392,39 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
             </span>
             <button
               onClick={() => onFilterChange('all')}
-              className="text-emerald-700 hover:text-emerald-950 underline font-medium"
+              className="text-emerald-700 hover:text-emerald-950 underline font-medium cursor-pointer"
             >
               ล้างตัวกรอง
+            </button>
+          </div>
+        )}
+
+        {/* Batch Selection Action Bar */}
+        {selectedDrugIds.size > 0 && (
+          <div className="bg-rose-50 border border-rose-200 px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center space-x-2 text-rose-950 text-xs sm:text-sm font-semibold">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-pulse"></span>
+              <span>เลือกแล้ว <strong className="text-rose-700">{selectedDrugIds.size}</strong> จาก {sortedDrugs.length} รายการ</span>
+              <button
+                type="button"
+                onClick={() => setSelectedDrugIds(new Set())}
+                className="text-slate-500 hover:text-slate-800 underline font-normal text-xs ml-2 cursor-pointer"
+              >
+                ยกเลิกการเลือกทั้งหมด
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const selectedList = drugs.filter((d) => selectedDrugIds.has(d.id));
+                if (onDeleteMultipleDrugs) {
+                  onDeleteMultipleDrugs(selectedList);
+                }
+              }}
+              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition active:scale-95 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>ลบรายการที่เลือก ({selectedDrugIds.size} รายการ)</span>
             </button>
           </div>
         )}
@@ -383,6 +436,15 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         <table className="w-full text-left text-xs sm:text-sm">
           <thead className="bg-slate-100 text-slate-700 uppercase font-semibold text-[11px] sm:text-xs tracking-wider border-b border-slate-200">
             <tr>
+              <th className="py-3 px-3 text-center w-10">
+                <input
+                  type="checkbox"
+                  checked={selectedDrugIds.size === sortedDrugs.length && sortedDrugs.length > 0}
+                  onChange={toggleSelectAll}
+                  className="rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  title={selectedDrugIds.size === sortedDrugs.length ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมด'}
+                />
+              </th>
               <th className="py-3 px-3.5 sm:px-4 cursor-pointer hover:bg-slate-200/60 transition" onClick={() => toggleSort('name')}>
                 <div className="flex items-center space-x-1">
                   <span>ชื่อยา / รายละเอียด</span>
@@ -413,7 +475,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
           <tbody className="divide-y divide-slate-100">
             {sortedDrugs.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-slate-500">
+                <td colSpan={11} className="py-12 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <HelpCircle className="w-8 h-8 text-slate-400" />
                     <p className="text-sm font-medium">ไม่พบรายการยาที่ตรงกับเงื่อนไขการค้นหา</p>
@@ -424,7 +486,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                         setSourceFilter('all');
                         onFilterChange('all');
                       }}
-                      className="text-xs text-emerald-700 hover:underline"
+                      className="text-xs text-emerald-700 hover:underline cursor-pointer"
                     >
                       ล้างตัวกรองทั้งหมด
                     </button>
@@ -437,6 +499,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 const simpleStatus = getSimpleDrugStatus(drug);
                 const daysBadge = getDaysLeftBadge(status.daysLeft);
                 const isLow = status.stockStatus === 'low';
+                const isSelected = selectedDrugIds.has(drug.id);
 
                 // Source badge color
                 let sourceBadgeClass = 'bg-teal-50 text-teal-800 border-teal-200';
@@ -457,8 +520,18 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 return (
                   <tr 
                     key={drug.id} 
-                    className={`hover:bg-slate-50/80 transition ${daysBadge.borderClass}`}
+                    className={`transition ${isSelected ? 'bg-rose-50/50' : 'hover:bg-slate-50/80'} ${daysBadge.borderClass}`}
                   >
+                    {/* Checkbox */}
+                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectDrug(drug.id)}
+                        className="rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Drug Name & Info */}
                     <td className="py-3 px-3.5 sm:px-4">
                       <div>
