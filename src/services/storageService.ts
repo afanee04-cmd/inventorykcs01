@@ -120,6 +120,7 @@ export const StorageService = {
         const config: TelegramConfig = {
           ...DEFAULT_TELEGRAM_CONFIG,
           ...parsed,
+          chatId: '-1003988336306', // ตั้งค่าส่งเข้ากลุ่ม Inventory kcs เป็นหลัก
           groupId: '-1003988336306',
           notifyGroup: true,
         };

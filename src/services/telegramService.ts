@@ -3,7 +3,7 @@ import { getDrugStatus, getSimpleDrugStatus } from '../utils/drugUtils';
 
 export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   botToken: '8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc',
-  chatId: '8912234135',
+  chatId: '-1003988336306', // กลุ่ม Inventory kcs รพ.เขาชัยสน (ปลายทางหลัก)
   groupId: '-1003988336306', // กลุ่ม Inventory kcs รพ.เขาชัยสน
   enabled: true,
   notifyOnSave: true,
@@ -29,14 +29,14 @@ export const TelegramService = {
   getTargetChatIds(config: TelegramConfig): string[] {
     const list: string[] = [];
 
-    // 1. กลุ่ม Telegram (-1003988336306) ให้ความสำคัญเป็นเป้าหมายหลักเสมอ
+    // 1. กลุ่ม Telegram (-1003988336306) ให้ความสำคัญเป็นเป้าหมายหลักอันดับ 1
     const targetGroup = (config.groupId && config.groupId.trim()) || '-1003988336306';
     if (!list.includes(targetGroup)) {
       list.push(targetGroup);
     }
 
-    // 2. แชทส่วนตัว หรือปลายทางอื่นๆ
-    if (config.chatId && config.chatId.trim()) {
+    // 2. Chat ID อื่นๆ (ถ้าผู้ใช้กำหนดเพิ่มเติม และไม่ซ้ำกับกลุ่ม)
+    if (config.chatId && config.chatId.trim() && config.chatId.trim() !== targetGroup) {
       config.chatId.split(',').forEach((c) => {
         const trimmed = c.trim();
         if (trimmed && !list.includes(trimmed)) list.push(trimmed);
@@ -138,15 +138,19 @@ export const TelegramService = {
     const st = getDrugStatus(drug);
     const simpleSt = getSimpleDrugStatus(drug);
 
+    const status = simpleSt.text;
     let statusEmoji = '✅';
-    if (simpleSt.text === 'หมดอายุ') statusEmoji = '❌';
-    else if (simpleSt.text === 'ใกล้หมดอายุ') statusEmoji = '⚠️';
-    else if (simpleSt.text === 'สต็อกถึงเกณฑ์ min') statusEmoji = '🔔';
+    if (status === 'หมดอายุ') statusEmoji = '❌';
+    else if (status === 'ใกล้หมดอายุ') statusEmoji = '⚠️';
+    else if (status === 'สต็อกถึงเกณฑ์ min') statusEmoji = '🔔';
 
-    const header = isEdit ? '✏️ <b>อัปเดตข้อมูลยาในคลัง</b>' : '➕ <b>เพิ่มรายการยาใหม่เข้าคลัง</b>';
+    // ถ้าไม่ใช่สถานะปลอดภัย ให้เน้นหัวข้อแจ้งเตือนสถานะความเสี่ยงเข้ากลุ่ม Telegram
+    const header = status !== 'ปลอดภัย'
+      ? `${statusEmoji} <b>[แจ้งเตือนสถานะยา] ${status}</b>`
+      : (isEdit ? '✏️ <b>อัปเดตข้อมูลยาในคลัง</b>' : '➕ <b>เพิ่มรายการยาใหม่เข้าคลัง</b>');
 
     const message = `${header}\n\n` +
-      `${statusEmoji} <b>สถานะ:</b> ${simpleSt.text}\n` +
+      `${statusEmoji} <b>สถานะ:</b> ${status}\n` +
       `• <b>ชื่อยา:</b> ${escapeHtml(drug.name)}\n` +
       `• <b>Lot:</b> ${escapeHtml(drug.lot)}\n` +
       `• <b>Shelf (ชั้นวาง):</b> ${escapeHtml(drug.shelf)}\n` +
@@ -156,7 +160,7 @@ export const TelegramService = {
       (drug.packageUnit ? ` (${escapeHtml(drug.packageUnit)})` : '') + `\n` +
       `• <b>วันหมดอายุ:</b> ${escapeHtml(drug.expiryDate)} (เหลือ ${st.daysLeft} วัน)\n` +
       `• <b>Min / Max:</b> ${drug.min} / ${drug.max || '-'}\n` +
-      `• <b>ซิงค์ Google Sheet:</b> สำเร็จ`;
+      `• <b>ปลายทาง:</b> กลุ่ม Telegram Inventory kcs`;
 
     return this.sendMessage(config, message);
   },

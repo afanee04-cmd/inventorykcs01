@@ -865,7 +865,8 @@ function sendToTelegram(token, chatId, message) {
 }
 
 /**
- * ติดตั้ง Trigger ตรวจสอบและส่ง Telegram อัตโนมัติทุก 1 ชั่วโมง
+ * ติดตั้ง Trigger ตรวจสอบและส่ง Telegram เข้ากลุ่ม Inventory kcs อัตโนมัติ
+ * ทำงานเมื่อมีการเปลี่ยนแปลงในชีท และวนลูปตรวจสอบทุก 1 ชั่วโมง
  */
 function createTelegramTrigger() {
   const triggers = ScriptApp.getProjectTriggers();
@@ -875,12 +876,19 @@ function createTelegramTrigger() {
     }
   }
   
+  // 1. ตรวจสอบตามช่วงเวลาทุก 1 ชั่วโมง
   ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
     .timeBased()
     .everyHours(1)
     .create();
     
-  Logger.log("ติดตั้ง Trigger Telegram เรียบร้อยแล้ว");
+  // 2. ตรวจสอบทันทีเมื่อข้อมูลใน Google Sheet มีการแก้ไข (onChange)
+  ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
+    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
+    .onChange()
+    .create();
+    
+  Logger.log("ติดตั้ง Trigger Telegram เข้ากลุ่ม Inventory kcs เรียบร้อยแล้ว");
 }
 
 // Helpers
