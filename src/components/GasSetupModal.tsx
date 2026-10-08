@@ -660,8 +660,27 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                 />
               </div>
 
-              {/* Chat ID & Group ID */}
+              {/* Group ID & Chat ID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Telegram Group ID (กลุ่มงาน - ปลายทางหลัก)</span>
+                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                      Inventory kcs
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={groupId}
+                    onChange={(e) => setGroupId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono border border-sky-400 bg-sky-50/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    placeholder="เช่น -1003988336306"
+                  />
+                  <p className="text-[11px] text-emerald-800 font-medium mt-1">
+                    ✅ แจ้งเตือนเข้ากลุ่มนี้โดยตรง (ห้อง Inventory kcs)
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Telegram Chat ID (แชทส่วนตัว)
@@ -675,25 +694,6 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                   />
                   <p className="text-[11px] text-slate-600 mt-1">
                     ไอดีผู้ใช้ส่วนตัว สำหรับรับการแจ้งเตือนเดี่ยว
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Telegram Group ID (กลุ่มงาน)</span>
-                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300">
-                      Inventory kcs
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    value={groupId}
-                    onChange={(e) => setGroupId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
-                    placeholder="เช่น -1003988336306"
-                  />
-                  <p className="text-[11px] text-slate-600 mt-1">
-                    ไอดีกลุ่ม Telegram สำหรับแจ้งเตือนเจ้าหน้าที่ในกลุ่ม
                   </p>
                 </div>
               </div>

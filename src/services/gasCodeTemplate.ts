@@ -27,8 +27,9 @@ const LINE_DESTINATION_ID = "YOUR_LINE_USER_OR_GROUP_ID";
 
 // Telegram Bot Settings (เชื่อมต่อระบบคลังยานอก รพ.เขาชัยสน @pharmkcsbot)
 const TELEGRAM_BOT_TOKEN = "8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc";
-const TELEGRAM_CHAT_ID = "8912234135";
+const TELEGRAM_CHAT_ID = "-1003988336306"; // ID กลุ่ม Telegram: Inventory kcs (ปลายทางหลัก)
 const TELEGRAM_GROUP_ID = "-1003988336306"; // กลุ่ม Inventory kcs รพ.เขาชัยสน
+const TELEGRAM_USER_ID = "8912234135"; // แชทส่วนตัว
 
 // หัวตารางคลังยาแบบแสดงสถานะครบถ้วน (พร้อมหน่วยบรรจุ)
 const INVENTORY_HEADERS = [
@@ -729,13 +730,12 @@ function createDailyTrigger() {
 function checkInventoryAndNotifyTelegram() {
   // --- ข้อมูล Telegram Bot ของคุณ ---
   var token = TELEGRAM_BOT_TOKEN;
-  var chatId = TELEGRAM_CHAT_ID;
-  var groupId = TELEGRAM_GROUP_ID;
+  var chatId = TELEGRAM_CHAT_ID; // กลุ่ม Inventory kcs (-1003988336306)
+  var userId = TELEGRAM_USER_ID;  // แชทส่วนตัว (8912234135)
   
-  // รายชื่อแชทและกลุ่มปลายทางที่ต้องส่ง (ส่งทั้งแชทส่วนตัว และกลุ่ม Telegram รพ.เขาชัยสน)
-  var targetChatIds = [];
-  if (chatId) targetChatIds.push(chatId);
-  if (groupId && targetChatIds.indexOf(groupId) < 0) targetChatIds.push(groupId);
+  // รายชื่อแชทและกลุ่มปลายทางที่ต้องส่ง (ส่งเข้ากลุ่ม Telegram เป็นหลัก และแชทส่วนตัว)
+  var targetChatIds = [chatId];
+  if (userId && targetChatIds.indexOf(userId) < 0) targetChatIds.push(userId);
   
   // --- เปิด Google Sheet ตาม ID ที่ระบุ ---
   var spreadsheetId = SPREADSHEET_ID;

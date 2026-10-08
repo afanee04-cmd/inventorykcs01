@@ -4,7 +4,7 @@ import { getDrugStatus, getSimpleDrugStatus } from '../utils/drugUtils';
 export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   botToken: '8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc',
   chatId: '8912234135',
-  groupId: '-1003988336306',
+  groupId: '-1003988336306', // กลุ่ม Inventory kcs รพ.เขาชัยสน
   enabled: true,
   notifyOnSave: true,
   notifyOnDispense: true,
@@ -24,21 +24,25 @@ function escapeHtml(text: any): string {
 export const TelegramService = {
   /**
    * รวมรายชื่อห้องแชทและกลุ่มทั้งหมดที่ต้องส่งข้อความไปหา
+   * กำหนดให้กลุ่ม Telegram (-1003988336306 : Inventory kcs) เป็นเป้าหมายหลักเสมอ
    */
   getTargetChatIds(config: TelegramConfig): string[] {
     const list: string[] = [];
+
+    // 1. กลุ่ม Telegram (-1003988336306) ให้ความสำคัญเป็นเป้าหมายหลักเสมอ
+    const targetGroup = (config.groupId && config.groupId.trim()) || '-1003988336306';
+    if (!list.includes(targetGroup)) {
+      list.push(targetGroup);
+    }
+
+    // 2. แชทส่วนตัว หรือปลายทางอื่นๆ
     if (config.chatId && config.chatId.trim()) {
       config.chatId.split(',').forEach((c) => {
         const trimmed = c.trim();
         if (trimmed && !list.includes(trimmed)) list.push(trimmed);
       });
     }
-    if (config.groupId && config.groupId.trim() && config.notifyGroup !== false) {
-      config.groupId.split(',').forEach((g) => {
-        const trimmed = g.trim();
-        if (trimmed && !list.includes(trimmed)) list.push(trimmed);
-      });
-    }
+
     return list;
   },
 

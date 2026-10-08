@@ -117,12 +117,15 @@ export const StorageService = {
       const data = localStorage.getItem(STORAGE_KEYS.TELEGRAM_CONFIG);
       if (data) {
         const parsed = JSON.parse(data);
-        return {
+        const config: TelegramConfig = {
           ...DEFAULT_TELEGRAM_CONFIG,
           ...parsed,
-          groupId: parsed.groupId || DEFAULT_TELEGRAM_CONFIG.groupId,
-          notifyGroup: parsed.notifyGroup !== undefined ? parsed.notifyGroup : true,
+          groupId: '-1003988336306',
+          notifyGroup: true,
         };
+        // บันทึกกลับเพื่อให้ localStorage อัปเดตทันที
+        localStorage.setItem(STORAGE_KEYS.TELEGRAM_CONFIG, JSON.stringify(config));
+        return config;
       }
     } catch (e) {
       console.error('Failed to read Telegram config', e);
