@@ -207,7 +207,7 @@ function doPost(e) {
         statusInfo.stockStatusText,
         statusInfo.alertSummaryText,
         item.receivedDate,
-        item.notes || "",
+        statusInfo.simpleStatusText || "ปลอดภัย",
         new Date().toISOString()
       ];
       
@@ -265,7 +265,7 @@ function doPost(e) {
             statusInfo.stockStatusText,
             statusInfo.alertSummaryText,
             item.receivedDate, 
-            item.notes || "", 
+            statusInfo.simpleStatusText || "ปลอดภัย", 
             new Date().toISOString()
           ];
         });
@@ -509,11 +509,22 @@ function computeDrugStatuses(expiryDateStr, qty, min, max) {
     alertSummaryText = "🟠 ถึงเกณฑ์ Min (ต้องสั่งเพิ่ม)";
   }
   
+  // สถานะสรุปแบบสั้นสำหรับคอลัมน์สถานะ (ปลอดภัย, ใกล้หมดอายุ, หมดอายุ, สต็อกถึงเกณฑ์ min)
+  let simpleStatusText = "ปลอดภัย";
+  if (isExpired) {
+    simpleStatusText = isLowStock ? "หมดอายุ, สต็อกถึงเกณฑ์ min" : "หมดอายุ";
+  } else if (isNearExpiry) {
+    simpleStatusText = isLowStock ? "ใกล้หมดอายุ, สต็อกถึงเกณฑ์ min" : "ใกล้หมดอายุ";
+  } else if (isLowStock) {
+    simpleStatusText = "สต็อกถึงเกณฑ์ min";
+  }
+  
   return {
     daysLeft: daysLeft,
     expiryStatusText: expiryStatusText,
     stockStatusText: stockStatusText,
     alertSummaryText: alertSummaryText,
+    simpleStatusText: simpleStatusText,
     isExpired: isExpired,
     isNearExpiry: isNearExpiry,
     isLowStock: isLowStock
@@ -549,9 +560,10 @@ function refreshAllStatusesInSheet() {
     if (is19Layout) {
       sheet.getRange(i + 1, 15).setValue(st.stockStatusText);
       sheet.getRange(i + 1, 16).setValue(st.alertSummaryText);
+      sheet.getRange(i + 1, 18).setValue(st.simpleStatusText);
       sheet.getRange(i + 1, 19).setValue(new Date().toISOString());
     } else {
-      sheet.getRange(i + 1, 14).setValue(st.stockStatusText);
+      sheet.getRange(i + 1, 14).setValue(st.simpleStatusText);
       sheet.getRange(i + 1, 15).setValue(st.alertSummaryText);
       sheet.getRange(i + 1, 18).setValue(new Date().toISOString());
     }
@@ -730,26 +742,52 @@ function createDailyTrigger() {
 function checkInventoryAndNotifyTelegram() {
   // --- ข้อมูล Telegram Bot ของคุณ ---
   var token = TELEGRAM_BOT_TOKEN;
-  var chatId = TELEGRAM_CHAT_ID; // กลุ่ม Inventory kcs (-1003988336306)
   
-  // รายชื่อแชทเป้าหมาย (ส่งเข้ากลุ่ม Telegram Inventory kcs เป็นหลัก)
-  var targetChatIds = [chatId];
+  // รายชื่อแชทเป้าหมาย (ส่งเข้ากลุ่ม Telegram Inventory kcs: -1003988336306 เป็นหลักเสมอ)
+  var mainGroupId = "-1003988336306";
+  var targetChatIds = [mainGroupId];
+  if (TELEGRAM_CHAT_ID && TELEGRAM_CHAT_ID !== mainGroupId && targetChatIds.indexOf(TELEGRAM_CHAT_ID) === -1) {
+    targetChatIds.push(TELEGRAM_CHAT_ID);
+  }
   
   // --- เปิด Google Sheet ตาม ID ที่ระบุ ---
   var spreadsheetId = SPREADSHEET_ID;
-  var sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(SHEET_NAME_INVENTORY) || SpreadsheetApp.openById(spreadsheetId).getSheets()[0];
+  var ss = SpreadsheetApp.openById(spreadsheetId);
+  var sheet = ss.getSheetByName(SHEET_NAME_INVENTORY) || ss.getSheets()[0];
   var dataRange = sheet.getDataRange();
   var values = dataRange.getValues();
   
   if (values.length <= 1) return;
 
-  // ค้นหา Column สถานะโดยอัตโนมัติ (รองรับทั้งชีท 14 คอลัมน์, 18 คอลัมน์ และ 19 คอลัมน์)
-  var statusColIndex = 13; // ค่าเริ่มต้น Column N (Index = 13)
-  for (var c = 0; c < values[0].length; c++) {
-    var h = String(values[0][c] || "");
-    if (h.indexOf("สถานะ (ปลอดภัย") >= 0 || h === "สถานะ" || h.indexOf("สถานะ") >= 0) {
+  // ค้นหา Column สถานะและข้อมูลแถวโดยอัตโนมัติ (รองรับทั้งชีท 14 คอลัมน์ และ 19 คอลัมน์)
+  var statusColIndex = -1;
+  var nameColIndex = 1;     // Column B: ชื่อยา
+  var lotColIndex = 3;      // Column D: Lot
+  var sourceColIndex = 5;   // Column F: แหล่งที่มา
+  var subWarehouseColIndex = 6; // Column G: คลังยาย่อย
+
+  var headerRow = values[0];
+  for (var c = 0; c < headerRow.length; c++) {
+    var h = String(headerRow[c] || "").trim();
+    var hLower = h.toLowerCase();
+    
+    // ค้นหาคอลัมน์สถานะรวม (ปลอดภัย/ใกล้หมดอายุ/หมดอายุ/สต็อกถึงเกณฑ์ min)
+    if (h.indexOf("ปลอดภัย/ใกล้หมดอายุ") >= 0 || h.indexOf("สถานะ (ปลอดภัย") >= 0 || h === "สถานะ" || hLower === "status") {
       statusColIndex = c;
-      break;
+    }
+    
+    if (h.indexOf("ชื่อยา") >= 0 || hLower.indexOf("drug name") >= 0) nameColIndex = c;
+    if (h.indexOf("Lot") >= 0 || hLower.indexOf("lot") >= 0) lotColIndex = c;
+    if (h.indexOf("แหล่งที่มา") >= 0 || hLower.indexOf("source") >= 0) sourceColIndex = c;
+    if (h.indexOf("คลังย่อย") >= 0 || h.indexOf("คลังยาย่อย") >= 0 || hLower.indexOf("sub-warehouse") >= 0) subWarehouseColIndex = c;
+  }
+
+  // หากยังไม่พบคอลัมน์สถานะโดยตรงจากชื่อหัวตาราง
+  if (statusColIndex === -1) {
+    if (headerRow.length >= 18) {
+      statusColIndex = 17; // คอลัมน์ R ใน 19-column layout
+    } else {
+      statusColIndex = 13; // คอลัมน์ N ใน 14-column layout
     }
   }
 
@@ -763,10 +801,21 @@ function checkInventoryAndNotifyTelegram() {
     var row = values[i];
     var status = String(row[statusColIndex] || "").trim();
     
+    // ถ้าช่องสถานะว่าง ให้ลองคำนวณสถานะจากวันหมดอายุและจำนวนคงเหลือในแถวโดยตรง
+    if (!status && row.length > 7) {
+      var expStr = row[7];
+      var qty = Number((row.length >= 10 ? row[9] : row[8]) || 0);
+      var minVal = Number((row.length >= 13 ? row[12] : (row.length >= 12 ? row[11] : 0)) || 0);
+      var calcSt = computeDrugStatuses(expStr, qty, minVal, 0);
+      status = calcSt.simpleStatusText;
+    }
+    
     // ถ้าช่องสถานะว่าง ให้ข้าม
     if (!status) continue;
     
-    var propertyKey = "row_" + (i + 1); // ใช้แถวที่ในชีทเป็น Key อ้างอิง
+    // กำหนด Key อ้างอิงตาม ID ยา หรือชื่อยา+Lot หรือแถว
+    var rowKey = String(row[0] || "").trim() || (String(row[nameColIndex] || "") + "_" + String(row[lotColIndex] || ""));
+    var propertyKey = "item_st_" + (rowKey || ("row_" + (i + 1)));
     var previousStatus = properties.getProperty(propertyKey) || "";
     
     // 1. ตรวจสอบว่า "สถานะมีการเปลี่ยนแปลง" จากรอบที่แล้วหรือไม่
@@ -779,16 +828,16 @@ function checkInventoryAndNotifyTelegram() {
       if (status !== "ปลอดภัย" && status.indexOf("ปลอดภัย") < 0) {
         
         // ดึงข้อมูลและป้องกัน Error จากอักขระพิเศษ HTML
-        var itemName = escapeHtml(row[1]);     // Column B: ชื่อยา
-        var lot = escapeHtml(row[3]);          // Column D: Lot
-        var source = escapeHtml(row[5]);       // Column F: แหล่งที่มา
-        var subWarehouse = escapeHtml(row[6]); // Column G: คลังยาย่อย
+        var itemName = escapeHtml(row[nameColIndex]);     // ชื่อยา
+        var lot = escapeHtml(row[lotColIndex]);          // Lot
+        var source = escapeHtml(row[sourceColIndex]);       // แหล่งที่มา
+        var subWarehouse = escapeHtml(row[subWarehouseColIndex]); // คลังยาย่อย
         
         // กำหนด Emoji ตามสถานะ
         var emoji = "⚠️";
-        if (status === "หมดอายุ" || status.indexOf("หมดอายุแล้ว") >= 0) emoji = "❌";
+        if (status === "หมดอายุ" || status.indexOf("หมดอายุ") >= 0) emoji = "❌";
         else if (status === "ใกล้หมดอายุ" || status.indexOf("ใกล้หมดอายุ") >= 0) emoji = "⚠️";
-        else if (status === "สต็อกถึงเกณฑ์ min" || status.indexOf("ถึงเกณฑ์ Min") >= 0) emoji = "🔔";
+        else if (status === "สต็อกถึงเกณฑ์ min" || status.indexOf("ถึงเกณฑ์ min") >= 0 || status.indexOf("ถึงเกณฑ์ Min") >= 0) emoji = "🔔";
         
         // จัดรูปแบบข้อความตามลำดับที่ต้องการ
         var message = emoji + " <b>สถานะ:</b> " + status + "\\n" +
@@ -803,7 +852,7 @@ function checkInventoryAndNotifyTelegram() {
     }
   }
   
-  // หากมีรายการที่เปลี่ยนแปลงและตรงตามเงื่อนไข ให้ส่งเข้า Telegram
+  // หากมีรายการที่เปลี่ยนแปลงและตรงตามเงื่อนไข ให้ส่งเข้า Telegram (กลุ่ม Inventory kcs เป็นหลัก)
   if (alerts.length > 0) {
     var header = "<b>📦 รายงานการเปลี่ยนแปลงสถานะยาและเวชภัณฑ์ (รพ.เขาชัยสน)</b>\\n\\n";
     var batchSize = 10; // ส่งทีละ 10 รายการเพื่อป้องกันข้อความยาวเกินไป
@@ -864,29 +913,47 @@ function sendToTelegram(token, chatId, message) {
 
 /**
  * ติดตั้ง Trigger ตรวจสอบและส่ง Telegram เข้ากลุ่ม Inventory kcs อัตโนมัติ
- * ทำงานเมื่อมีการเปลี่ยนแปลงในชีท และวนลูปตรวจสอบทุก 1 ชั่วโมง
+ * ทำงานทันทีเมื่อมีการแก้ไขข้อมูลในชีท (onEdit/onChange) และตรวจเช็คทุก 15 นาที
  */
 function createTelegramTrigger() {
   const triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === "checkInventoryAndNotifyTelegram") {
+    const fn = triggers[i].getHandlerFunction();
+    if (fn === "checkInventoryAndNotifyTelegram") {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
   
-  // 1. ตรวจสอบตามช่วงเวลาทุก 1 ชั่วโมง
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // 1. ตรวจสอบทันทีเมื่อมีการแก้ไขเซลล์ใน Google Sheet (onEdit installable trigger)
   ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
-    .timeBased()
-    .everyHours(1)
+    .forSpreadsheet(ss)
+    .onEdit()
     .create();
-    
-  // 2. ตรวจสอบทันทีเมื่อข้อมูลใน Google Sheet มีการแก้ไข (onChange)
+
+  // 2. ตรวจสอบทันทีเมื่อโครงสร้างข้อมูลในชีทมีการเปลี่ยนแปลง (onChange)
   ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
-    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
+    .forSpreadsheet(ss)
     .onChange()
     .create();
+
+  // 3. ตรวจสอบตามช่วงเวลาอัตโนมัติทุก 15 นาที
+  ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")
+    .timeBased()
+    .everyMinutes(15)
+    .create();
     
-  Logger.log("ติดตั้ง Trigger Telegram เข้ากลุ่ม Inventory kcs เรียบร้อยแล้ว");
+  Logger.log("ติดตั้ง Trigger Telegram เข้ากลุ่ม Inventory kcs (-1003988336306) สำเร็จเรียบร้อยแล้ว");
+}
+
+/**
+ * ติดตั้ง Trigger ทั้งหมดของระบบ (ทั้ง LINE และ Telegram) พร้อมกันในคลิกเดียว
+ */
+function installAllTriggers() {
+  createDailyTrigger();
+  createTelegramTrigger();
+  Logger.log("ติดตั้ง Trigger ทั้งหมดของระบบคลังยานอก รพ.เขาชัยสน เรียบร้อยแล้ว");
 }
 
 // Helpers

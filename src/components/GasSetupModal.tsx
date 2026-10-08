@@ -630,12 +630,26 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                   type="button"
                   onClick={handleSendTelegramStatusReport}
                   disabled={isSendingStatusReport}
-                  className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="ส่งสรุปยาใกล้หมดอายุ/หมดอายุ/ต่ำกว่า Min เข้า Telegram ทันที"
+                  className="px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="ส่งสรุปยาใกล้หมดอายุ/หมดอายุ/ต่ำกว่า Min ทั้งหมดเข้า Telegram ทันที (ทางเลือกเมื่อต้องการดูสรุปทันที)"
                 >
                   {isSendingStatusReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4 text-emerald-300" />}
-                  <span>{isSendingStatusReport ? 'กำลังส่ง...' : 'ส่งรายงานสถานะยาทันที'}</span>
+                  <span>{isSendingStatusReport ? 'กำลังส่ง...' : 'ส่งสรุปรายงานสถานะทันที (ทางเลือก)'}</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Auto Alert Active Notice Banner */}
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-start gap-2.5 text-xs text-emerald-950">
+              <span className="text-base leading-none">⚡</span>
+              <div className="space-y-0.5">
+                <div className="font-bold font-['Prompt'] text-emerald-900 flex items-center gap-2">
+                  <span>ระบบแจ้งเตือนอัตโนมัติเข้ากลุ่ม Inventory kcs ทำงานอยู่แล้ว</span>
+                  <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-sans">Active</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  เมื่อมีการเปลี่ยนแปลงสถานะยา (หมดอายุ, ใกล้หมดอายุ, สต็อกถึงเกณฑ์ min) ไม่ว่าจะแก้ไข/ตัดยอดจากบนเว็บ หรือแก้ไขข้อมูลใน Google Sheet ระบบจะส่งแจ้งเตือนเข้ากลุ่ม <code>-1003988336306</code> อัตโนมัติทันที โดยไม่จำเป็นต้องกดปุ่มส่งรายงานด้วยตนเอง
+                </p>
               </div>
             </div>
 
@@ -837,6 +851,18 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                   2. เลือกประเภทเป็น <strong>เว็บแอป (Web App)</strong><br />
                   3. ตรง <strong>"ผู้ที่มีสิทธิ์เข้าถึง" (Who has access)</strong> ให้เลือกเป็น <strong>"ทุกคน" (Anyone)</strong> (สำคัญมาก เพื่อให้เว็ปแอปนี้ส่งข้อมูลเข้าออกได้โดยไม่ติดสิทธิ์)<br />
                   4. กด Deploy แล้วคัดลอก Web App URL (ลงท้ายด้วย <code>/exec</code>) มาใส่ในช่อง URL ของระบบ
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-sky-50/60 rounded-xl border border-sky-200">
+                <span className="font-bold text-sky-950 block text-xs mb-1">
+                  ขั้นตอนที่ 3: เปิดใช้งานการแจ้งเตือนอัตโนมัติเข้ากลุ่ม Telegram เมื่อแก้ไขใน Google Sheet
+                </span>
+                <p className="text-slate-600 leading-relaxed">
+                  1. ในหน้าต่าง Google Apps Script ด้านบน มองหาแถบเลือกฟังก์ชัน (Dropdown Function)<br />
+                  2. เลือกฟังก์ชันชื่อ <strong>installAllTriggers</strong> (หรือ <code>createTelegramTrigger</code>)<br />
+                  3. กดปุ่ม <strong>"เรียกใช้" (Run) ▶️</strong> หนึ่งครั้ง และกดให้สิทธิ์การเข้าถึง (Review Permissions &gt; Allow)<br />
+                  4. เรียบร้อย! ระบบจะตรวจจับการเปลี่ยนแปลงใน Google Sheet (เมื่อพิมพ์แก้ไขข้อมูลหรือสถานะยาเปลี่ยน) และส่งแจ้งเตือนเข้ากลุ่ม Telegram <strong>Inventory kcs (-1003988336306)</strong> อัตโนมัติทันที
                 </p>
               </div>
 

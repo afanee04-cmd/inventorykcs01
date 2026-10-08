@@ -262,6 +262,91 @@ export const TelegramService = {
   },
 
   /**
+   * ตรวจจับการเปลี่ยนแปลงสถานะยาอัตโนมัติ (เช่น จาก ปลอดภัย -> ใกล้หมดอายุ/หมดอายุ/ถึงเกณฑ์ min)
+   * แล้วส่งแจ้งเตือนเข้ากลุ่ม Telegram ทันทีโดยไม่ต้องกดปุ่มส่งรายงาน
+   */
+  async checkAndNotifyStatusChangesAutomatically(
+    config: TelegramConfig,
+    drugs: DrugItem[]
+  ): Promise<{ sentCount: number; changedItems: string[] }> {
+    if (!config.enabled || !config.notifyOnStatusChange) {
+      return { sentCount: 0, changedItems: [] };
+    }
+
+    const STORAGE_STATUS_CACHE_KEY = 'kcs_pharmacy_status_cache_v1';
+    let previousMap: Record<string, string> = {};
+
+    try {
+      const raw = localStorage.getItem(STORAGE_STATUS_CACHE_KEY);
+      if (raw) previousMap = JSON.parse(raw);
+    } catch (e) {
+      previousMap = {};
+    }
+
+    const currentMap: Record<string, string> = {};
+    const alertMessages: string[] = [];
+    const changedItems: string[] = [];
+
+    for (let i = 0; i < drugs.length; i++) {
+      const drug = drugs[i];
+      const simpleSt = getSimpleDrugStatus(drug);
+      const currentStatus = simpleSt.text;
+      const key = `${drug.id || drug.name}_${drug.lot}`;
+
+      currentMap[key] = currentStatus;
+      const prevStatus = previousMap[key];
+
+      // ตรวจสอบว่ามีสถานะเปลี่ยนจากเดิมหรือไม่
+      // 1. ถ้ามีประวัติเดิมและสถานะเปลี่ยนมาเป็นไม่ปลอดภัย
+      // 2. หรือถ้ามีแคชเดิมอยู่แล้ว และมีรายการใหม่เพิ่มเข้ามาที่มีสถานะไม่ปลอดภัย
+      const hasPreviousCache = Object.keys(previousMap).length > 0;
+      const isStatusChanged = prevStatus !== undefined && prevStatus !== currentStatus;
+      const isNewUnsafeItem = prevStatus === undefined && hasPreviousCache && currentStatus !== 'ปลอดภัย';
+
+      if ((isStatusChanged || isNewUnsafeItem) && currentStatus !== 'ปลอดภัย' && !currentStatus.includes('ปลอดภัย')) {
+        let emoji = '⚠️';
+        if (currentStatus.includes('หมดอายุ')) emoji = '❌';
+        else if (currentStatus.includes('ใกล้หมดอายุ')) emoji = '⚠️';
+        else if (currentStatus.includes('สต็อกถึงเกณฑ์ min') || currentStatus.includes('Min')) emoji = '🔔';
+
+        const prevLabel = prevStatus ? ` (เดิม: ${prevStatus})` : ' (ตรวจพบใหม่)';
+        const msg = `${emoji} <b>[สถานะเปลี่ยนอัตโนมัติ] ${currentStatus}</b>${prevLabel}\n` +
+          `• <b>ชื่อยา:</b> ${escapeHtml(drug.name)}\n` +
+          `• <b>Lot:</b> ${escapeHtml(drug.lot)}\n` +
+          `• <b>คลังยาย่อย:</b> ${escapeHtml(drug.subWarehouse)}\n` +
+          `• <b>แหล่งที่มา:</b> ${escapeHtml(drug.source)}\n` +
+          `• <b>คงเหลือ:</b> ${drug.quantity.toLocaleString()} ${escapeHtml(drug.unit)}`;
+
+        alertMessages.push(msg);
+        changedItems.push(drug.name);
+      }
+    }
+
+    // อัปเดตแคชสถานะล่าสุด
+    try {
+      localStorage.setItem(STORAGE_STATUS_CACHE_KEY, JSON.stringify(currentMap));
+    } catch (e) {}
+
+    // หากพบรายการที่สถานะเปลี่ยนและไม่ปลอดภัย ส่งเข้ากลุ่ม Telegram ทันที
+    let sentCount = 0;
+    if (alertMessages.length > 0) {
+      const header = `<b>⚡ ตรวจพบการเปลี่ยนแปลงสถานะยา (แจ้งเตือนอัตโนมัติ)</b>\n\n`;
+      const batchSize = 10;
+
+      for (let j = 0; j < alertMessages.length; j += batchSize) {
+        const chunk = alertMessages.slice(j, j + batchSize);
+        const fullMessage = header + chunk.join('\n\n-------------------\n\n');
+        const res = await this.sendMessage(config, fullMessage);
+        if (res.success) {
+          sentCount += chunk.length;
+        }
+      }
+    }
+
+    return { sentCount, changedItems };
+  },
+
+  /**
    * แจ้งเตือนเมื่อมีการลบรายการยาออกจากคลัง
    */
   async notifyDrugDeleted(

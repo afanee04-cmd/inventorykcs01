@@ -87,17 +87,47 @@ export default function App() {
           StorageService.saveDrugs(res.items);
           const t = updateSyncTimestamp();
           setSyncStatus({ status: 'success', lastTime: t });
+          // ตรวจจับและแจ้งเตือนเข้ากลุ่ม Telegram อัตโนมัติเมื่อพบสถานะยาเปลี่ยน (เช่น ยาหมดอายุ, ใกล้หมดอายุ, ต่ำกว่า min)
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, res.items).catch(() => {});
         } else if (res.success) {
           // If sheet is empty, auto-push initial drugs with status columns to sheet
           autoPushToSheet(loadedDrugs);
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
         } else {
           setSyncStatus({ status: 'error', errorText: res.error, lastTime: null });
+          // แม้เชื่อมต่อชีทไม่ได้ ก็ตรวจสถานะจากข้อมูลในเว็บและแจ้งเตือนเข้า Telegram อัตโนมัติ
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
         }
       })
       .catch((err) => {
         setSyncStatus({ status: 'error', errorText: err.message, lastTime: null });
+        TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
       });
   }, []);
+
+  // ระบบตรวจสอบสถานะยาอัตโนมัติในเบื้องหลังทุก 2.5 นาที (Auto-check & Auto-notify status changes)
+  // ตรวจจับทั้งการเปลี่ยนแปลงจาก Google Sheet และบนเว็บ ส่งเข้ากลุ่ม Telegram ทันทีโดยไม่ต้องกดปุ่ม
+  useEffect(() => {
+    const timer = setInterval(() => {
+      GasApiService.fetchDrugs(gasConfig)
+        .then((res) => {
+          if (res.success && res.items && res.items.length > 0) {
+            setDrugs(res.items);
+            StorageService.saveDrugs(res.items);
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, res.items).catch(() => {});
+          } else {
+            const local = StorageService.getDrugs();
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, local).catch(() => {});
+          }
+        })
+        .catch(() => {
+          const local = StorageService.getDrugs();
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, local).catch(() => {});
+        });
+    }, 150000); // ทุก 2.5 นาที
+
+    return () => clearInterval(timer);
+  }, [gasConfig, telegramConfig]);
 
   const updateSyncTimestamp = () => {
     const now = new Date();
@@ -120,6 +150,9 @@ export default function App() {
       setSyncStatus({ status: 'error', errorText: err.message, lastTime: lastSyncTime });
       console.warn('Auto-sync to Google Sheet note:', err);
     }
+
+    // ตรวจสอบสถานะยาอัตโนมัติและแจ้งเตือนเข้ากลุ่ม Telegram ทันที
+    TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, currentDrugs).catch(() => {});
   };
 
   // Manual Sync Button Handler
