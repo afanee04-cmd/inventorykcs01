@@ -4,10 +4,12 @@ import { getDrugStatus, getSimpleDrugStatus } from '../utils/drugUtils';
 export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   botToken: '8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc',
   chatId: '8912234135',
+  groupId: '-1003988336306',
   enabled: true,
   notifyOnSave: true,
   notifyOnDispense: true,
   notifyOnStatusChange: true,
+  notifyGroup: true,
   lastAlertSentAt: null,
 };
 
@@ -21,7 +23,27 @@ function escapeHtml(text: any): string {
 
 export const TelegramService = {
   /**
-   * ส่งข้อความไปยัง Telegram Bot
+   * รวมรายชื่อห้องแชทและกลุ่มทั้งหมดที่ต้องส่งข้อความไปหา
+   */
+  getTargetChatIds(config: TelegramConfig): string[] {
+    const list: string[] = [];
+    if (config.chatId && config.chatId.trim()) {
+      config.chatId.split(',').forEach((c) => {
+        const trimmed = c.trim();
+        if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+      });
+    }
+    if (config.groupId && config.groupId.trim() && config.notifyGroup !== false) {
+      config.groupId.split(',').forEach((g) => {
+        const trimmed = g.trim();
+        if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+      });
+    }
+    return list;
+  },
+
+  /**
+   * ส่งข้อความไปยัง Telegram Bot (ส่งทั้งแชทส่วนตัว และกลุ่มเป้าหมาย)
    */
   async sendMessage(
     config: TelegramConfig,
@@ -30,33 +52,50 @@ export const TelegramService = {
     if (!config.enabled) {
       return { success: false, error: 'Telegram notification is disabled' };
     }
-    if (!config.botToken || !config.chatId) {
-      return { success: false, error: 'Telegram Bot Token or Chat ID is missing' };
+    if (!config.botToken) {
+      return { success: false, error: 'Telegram Bot Token is missing' };
     }
 
-    try {
-      const url = `https://api.telegram.org/bot${config.botToken}/sendMessage`;
-      const payload = {
-        chat_id: config.chatId,
-        text: message,
-        parse_mode: 'HTML',
-      };
+    const targets = this.getTargetChatIds(config);
+    if (targets.length === 0) {
+      return { success: false, error: 'Telegram Chat ID or Group ID is missing' };
+    }
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    let anySuccess = false;
+    let lastError = '';
+    let lastMsgId: number | undefined;
 
-      const data = await res.json();
-      if (data.ok) {
-        return { success: true, messageId: data.result?.message_id };
+    for (const targetId of targets) {
+      try {
+        const url = `https://api.telegram.org/bot${config.botToken}/sendMessage`;
+        const payload = {
+          chat_id: targetId,
+          text: message,
+          parse_mode: 'HTML',
+        };
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (data.ok) {
+          anySuccess = true;
+          lastMsgId = data.result?.message_id;
+        } else {
+          lastError = data.description || 'Failed to send to Telegram';
+        }
+      } catch (err: any) {
+        lastError = err.message || 'Network error';
       }
-      return { success: false, error: data.description || 'Failed to send to Telegram' };
-    } catch (err: any) {
-      console.warn('Telegram send error:', err);
-      return { success: false, error: err.message || 'Network error' };
     }
+
+    if (anySuccess) {
+      return { success: true, messageId: lastMsgId };
+    }
+    return { success: false, error: lastError };
   },
 
   /**
@@ -64,14 +103,20 @@ export const TelegramService = {
    */
   async testConnection(config: TelegramConfig): Promise<{ success: boolean; message: string }> {
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    const targets = this.getTargetChatIds(config);
+    const targetInfo = targets.includes('-1003988336306')
+      ? 'กลุ่ม Inventory kcs (-1003988336306) และแชทเป้าหมาย'
+      : `${targets.length} แชทเป้าหมาย`;
+
     const text = `🏥 <b>ระบบคลังยานอก รพ.เขาชัยสน</b>\n\n` +
       `✅ <b>ทดสอบการเชื่อมต่อ Telegram Bot สำเร็จ</b>\n` +
       `• <b>วันเวลา:</b> ${timeStr} น.\n` +
+      `• <b>ห้องแชท/กลุ่ม:</b> ${targetInfo}\n` +
       `• <b>สถานะ:</b> ระบบพร้อมรับส่งข้อมูลและแจ้งเตือนอัตโนมัติเมื่อกรอกข้อมูลบนเว็บและซิงค์ลง Google Sheet`;
 
     const res = await this.sendMessage(config, text);
     if (res.success) {
-      return { success: true, message: 'ส่งข้อความทดสอบไปยัง Telegram สำเร็จแล้ว!' };
+      return { success: true, message: `ส่งข้อความทดสอบไปยัง Telegram (${targetInfo}) สำเร็จแล้ว!` };
     }
     return { success: false, message: `ส่งไม่สำเร็จ: ${res.error}` };
   },
@@ -206,5 +251,23 @@ export const TelegramService = {
     }
 
     return { success: true, sentCount };
+  },
+
+  /**
+   * แจ้งเตือนเมื่อมีการลบรายการยาออกจากคลัง
+   */
+  async notifyDrugDeleted(
+    config: TelegramConfig,
+    drugName: string,
+    lot: string,
+    count?: number
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!config.enabled || !config.notifyOnSave) return { success: false };
+
+    const message = count && count > 1
+      ? `🗑️ <b>ลบรายการยาออกจากคลัง (${count} รายการ)</b>\n\n• ระบบได้อัปเดตและซิงค์ข้อมูลกับ Google Sheet เรียบร้อยแล้ว`
+      : `🗑️ <b>ลบรายการยาออกจากคลัง</b>\n\n• <b>ชื่อยา:</b> ${escapeHtml(drugName)}\n• <b>Lot:</b> ${escapeHtml(lot)}\n• ระบบได้อัปเดตและซิงค์ข้อมูลกับ Google Sheet เรียบร้อยแล้ว`;
+
+    return this.sendMessage(config, message);
   },
 };

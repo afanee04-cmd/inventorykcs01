@@ -53,10 +53,12 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
   // Telegram state
   const [botToken, setBotToken] = useState(telegramConfig.botToken || '');
   const [chatId, setChatId] = useState(telegramConfig.chatId || '');
+  const [groupId, setGroupId] = useState(telegramConfig.groupId || '-1003988336306');
   const [telegramEnabled, setTelegramEnabled] = useState(telegramConfig.enabled ?? true);
   const [notifyOnSave, setNotifyOnSave] = useState(telegramConfig.notifyOnSave ?? true);
   const [notifyOnDispense, setNotifyOnDispense] = useState(telegramConfig.notifyOnDispense ?? true);
   const [notifyOnStatusChange, setNotifyOnStatusChange] = useState(telegramConfig.notifyOnStatusChange ?? true);
+  const [notifyGroup, setNotifyGroup] = useState(telegramConfig.notifyGroup ?? true);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
   const [isSendingStatusReport, setIsSendingStatusReport] = useState(false);
 
@@ -94,14 +96,16 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
     const updated: TelegramConfig = {
       botToken: botToken.trim(),
       chatId: chatId.trim(),
+      groupId: groupId.trim(),
       enabled: telegramEnabled,
       notifyOnSave,
       notifyOnDispense,
       notifyOnStatusChange,
+      notifyGroup,
       lastAlertSentAt: telegramConfig.lastAlertSentAt,
     };
     onSaveTelegramConfig(updated);
-    setStatusMessage({ success: true, text: 'บันทึกการตั้งค่า Telegram Bot สำเร็จ' });
+    setStatusMessage({ success: true, text: 'บันทึกการตั้งค่า Telegram Bot และกลุ่มแจ้งเตือนสำเร็จ' });
   };
 
   // ทดสอบส่งข้อความ Telegram
@@ -112,10 +116,12 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
       const res = await TelegramService.testConnection({
         botToken: botToken.trim(),
         chatId: chatId.trim(),
+        groupId: groupId.trim(),
         enabled: true,
         notifyOnSave,
         notifyOnDispense,
         notifyOnStatusChange,
+        notifyGroup,
         lastAlertSentAt: null,
       });
       setStatusMessage({ success: res.success, text: res.message });
@@ -135,16 +141,21 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
         {
           botToken: botToken.trim(),
           chatId: chatId.trim(),
+          groupId: groupId.trim(),
           enabled: true,
           notifyOnSave,
           notifyOnDispense,
           notifyOnStatusChange,
+          notifyGroup,
           lastAlertSentAt: new Date().toISOString(),
         },
         drugs
       );
       if (res.sentCount > 0) {
-        setStatusMessage({ success: true, text: `ส่งรายงานสถานะยาที่มีปัญหา ${res.sentCount} รายการ เข้า Telegram สำเร็จแล้ว!` });
+        setStatusMessage({
+          success: true,
+          text: `ส่งรายงานสถานะยาที่มีปัญหา ${res.sentCount} รายการ เข้า Telegram (แชทส่วนตัว และกลุ่ม ${groupId}) สำเร็จแล้ว!`,
+        });
       } else {
         setStatusMessage({ success: true, text: 'คลังยาปกติ ไม่มีรายการที่ต้องแจ้งเตือน (ทุกรายการปลอดภัย)' });
       }
@@ -598,7 +609,7 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                     </span>
                   </h4>
                   <p className="text-xs text-sky-800 mt-0.5">
-                    แชทปลายทาง: Chat ID <code>{chatId}</code> | ระบบคลังยานอก รพ.เขาชัยสน
+                    แชทปลายทาง: Chat ID <code>{chatId}</code> | กลุ่ม <code>{groupId || '-1003988336306'}</code> (Inventory kcs)
                   </p>
                 </div>
               </div>
@@ -649,18 +660,42 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                 />
               </div>
 
-              {/* Chat ID */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Telegram Chat ID
-                </label>
-                <input
-                  type="text"
-                  value={chatId}
-                  onChange={(e) => setChatId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
-                  placeholder="เช่น 8912234135"
-                />
+              {/* Chat ID & Group ID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Telegram Chat ID (แชทส่วนตัว)
+                  </label>
+                  <input
+                    type="text"
+                    value={chatId}
+                    onChange={(e) => setChatId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
+                    placeholder="เช่น 8912234135"
+                  />
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    ไอดีผู้ใช้ส่วนตัว สำหรับรับการแจ้งเตือนเดี่ยว
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Telegram Group ID (กลุ่มงาน)</span>
+                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300">
+                      Inventory kcs
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={groupId}
+                    onChange={(e) => setGroupId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 bg-white"
+                    placeholder="เช่น -1003988336306"
+                  />
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    ไอดีกลุ่ม Telegram สำหรับแจ้งเตือนเจ้าหน้าที่ในกลุ่ม
+                  </p>
+                </div>
               </div>
 
               {/* Notification Checkboxes */}
@@ -677,6 +712,19 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                     className="rounded text-sky-600 focus:ring-sky-500"
                   />
                   <span className="font-semibold">เปิดใช้งานการแจ้งเตือน Telegram</span>
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 pl-4">
+                  <input
+                    type="checkbox"
+                    checked={notifyGroup}
+                    onChange={(e) => setNotifyGroup(e.target.checked)}
+                    disabled={!telegramEnabled}
+                    className="rounded text-sky-600 focus:ring-sky-500"
+                  />
+                  <span className="font-medium text-emerald-900">
+                    ส่งแจ้งเตือนเข้า <strong>กลุ่ม Telegram (Group ID: {groupId || '-1003988336306'})</strong> ด้วย
+                  </span>
                 </label>
 
                 <label className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 pl-4">
@@ -730,8 +778,8 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                 🔄 การเชื่อมต่อแบบ 2 ทาง (Web ➡️ Sheet ➡️ Telegram):
               </span>
               <ul className="list-disc list-inside text-sky-900 text-[11px] sm:text-xs space-y-1 pl-1">
-                <li><strong>เมื่อกรอกข้อมูลบนเว็บ:</strong> ข้อมูลจะถูกบันทึกและส่งเข้า Google Sheet อัตโนมัติ พร้อมส่งข้อความแจ้งเตือนเข้า Telegram Bot (@pharmkcsbot) ทันที</li>
-                <li><strong>เมื่อแก้ไขใน Google Sheet:</strong> ในไฟล์ <code>Code.gs</code> มีฟังก์ชัน <code>checkInventoryAndNotifyTelegram()</code> ตรวจจับการเปลี่ยนแปลงของคอลัมน์สถานะ (ยกเว้นสถานะ "ปลอดภัย") แล้วส่งเข้า Telegram อัตโนมัติ</li>
+                <li><strong>เมื่อกรอกข้อมูลบนเว็บ:</strong> ข้อมูลจะถูกบันทึกและส่งเข้า Google Sheet อัตโนมัติ พร้อมส่งข้อความแจ้งเตือนเข้าทั้งแชทส่วนตัว (Chat ID: {chatId}) และกลุ่ม Telegram (Group ID: {groupId || '-1003988336306'} : Inventory kcs) ทันที</li>
+                <li><strong>เมื่อแก้ไขใน Google Sheet:</strong> ในไฟล์ <code>Code.gs</code> มีฟังก์ชัน <code>checkInventoryAndNotifyTelegram()</code> ตรวจจับการเปลี่ยนแปลงของคอลัมน์สถานะ (ยกเว้นสถานะ "ปลอดภัย") แล้วส่งเข้าทั้งแชทและกลุ่ม Telegram อัตโนมัติ</li>
                 <li><strong>การตั้งเวลาอัตโนมัติ:</strong> ใน Apps Script สามารถรันฟังก์ชัน <code>createTelegramTrigger()</code> เพื่อให้ระบบตรวจเช็คและแจ้งเตือนเข้า Telegram ทุก 1 ชั่วโมงได้</li>
               </ul>
             </div>

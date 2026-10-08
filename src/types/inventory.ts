@@ -47,10 +47,12 @@ export interface LineConfig {
 export interface TelegramConfig {
   botToken: string;
   chatId: string;
+  groupId: string;             // ID กลุ่ม Telegram (เช่น -1003988336306)
   enabled: boolean;
   notifyOnSave: boolean;
   notifyOnDispense: boolean;
   notifyOnStatusChange: boolean;
+  notifyGroup: boolean;        // เปิด-ปิดส่งแจ้งเตือนเข้ากลุ่ม
   lastAlertSentAt: string | null;
 }
 

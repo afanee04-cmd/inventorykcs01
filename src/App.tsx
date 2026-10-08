@@ -220,6 +220,9 @@ export default function App() {
 
     // Auto-sync directly to Google Sheet in background
     autoPushToSheet(updatedDrugs);
+
+    // ส่งแจ้งเตือนการลบเข้า Telegram
+    TelegramService.notifyDrugDeleted(telegramConfig, targetName, deleteConfirmDrug.lot).catch(() => {});
   };
 
   // Bulk Delete Drugs - Auto syncs to Google Sheet
@@ -242,6 +245,9 @@ export default function App() {
     // Auto-sync directly to Google Sheet in background
     autoPushToSheet(updatedDrugs);
     GasApiService.deleteMultipleItemsFromGas(gasConfig, Array.from(idsToDelete)).catch(() => {});
+
+    // ส่งแจ้งเตือนการลบเป็นชุดเข้า Telegram
+    TelegramService.notifyDrugDeleted(telegramConfig, '', '', count).catch(() => {});
   };
 
   // Dispense Drug - Auto syncs to Google Sheet

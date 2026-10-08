@@ -28,6 +28,7 @@ const LINE_DESTINATION_ID = "YOUR_LINE_USER_OR_GROUP_ID";
 // Telegram Bot Settings (เชื่อมต่อระบบคลังยานอก รพ.เขาชัยสน @pharmkcsbot)
 const TELEGRAM_BOT_TOKEN = "8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc";
 const TELEGRAM_CHAT_ID = "8912234135";
+const TELEGRAM_GROUP_ID = "-1003988336306"; // กลุ่ม Inventory kcs รพ.เขาชัยสน
 
 // หัวตารางคลังยาแบบแสดงสถานะครบถ้วน (พร้อมหน่วยบรรจุ)
 const INVENTORY_HEADERS = [
@@ -726,9 +727,15 @@ function createDailyTrigger() {
  * ========================================================
  */
 function checkInventoryAndNotifyTelegram() {
-  // --- ข้อมูล Telegram Bot ---
+  // --- ข้อมูล Telegram Bot ของคุณ ---
   var token = TELEGRAM_BOT_TOKEN;
   var chatId = TELEGRAM_CHAT_ID;
+  var groupId = TELEGRAM_GROUP_ID;
+  
+  // รายชื่อแชทและกลุ่มปลายทางที่ต้องส่ง (ส่งทั้งแชทส่วนตัว และกลุ่ม Telegram รพ.เขาชัยสน)
+  var targetChatIds = [];
+  if (chatId) targetChatIds.push(chatId);
+  if (groupId && targetChatIds.indexOf(groupId) < 0) targetChatIds.push(groupId);
   
   // --- เปิด Google Sheet ตาม ID ที่ระบุ ---
   var spreadsheetId = SPREADSHEET_ID;
@@ -806,7 +813,10 @@ function checkInventoryAndNotifyTelegram() {
     for (var j = 0; j < alerts.length; j += batchSize) {
       var chunk = alerts.slice(j, j + batchSize);
       var fullMessage = header + chunk.join("\\n\\n-------------------\\n\\n");
-      sendToTelegram(token, chatId, fullMessage);
+      for (var t = 0; t < targetChatIds.length; t++) {
+        sendToTelegram(token, targetChatIds[t], fullMessage);
+        Utilities.sleep(300);
+      }
       
       // หน่วงเวลาเล็กน้อยป้องกัน Telegram บล็อคข้อความส่งถี่
       Utilities.sleep(500);

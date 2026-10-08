@@ -116,7 +116,13 @@ export const StorageService = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.TELEGRAM_CONFIG);
       if (data) {
-        return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        return {
+          ...DEFAULT_TELEGRAM_CONFIG,
+          ...parsed,
+          groupId: parsed.groupId || DEFAULT_TELEGRAM_CONFIG.groupId,
+          notifyGroup: parsed.notifyGroup !== undefined ? parsed.notifyGroup : true,
+        };
       }
     } catch (e) {
       console.error('Failed to read Telegram config', e);
