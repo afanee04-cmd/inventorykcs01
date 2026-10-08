@@ -731,11 +731,9 @@ function checkInventoryAndNotifyTelegram() {
   // --- ข้อมูล Telegram Bot ของคุณ ---
   var token = TELEGRAM_BOT_TOKEN;
   var chatId = TELEGRAM_CHAT_ID; // กลุ่ม Inventory kcs (-1003988336306)
-  var userId = TELEGRAM_USER_ID;  // แชทส่วนตัว (8912234135)
   
-  // รายชื่อแชทและกลุ่มปลายทางที่ต้องส่ง (ส่งเข้ากลุ่ม Telegram เป็นหลัก และแชทส่วนตัว)
+  // รายชื่อแชทเป้าหมาย (ส่งเข้ากลุ่ม Telegram Inventory kcs เป็นหลัก)
   var targetChatIds = [chatId];
-  if (userId && targetChatIds.indexOf(userId) < 0) targetChatIds.push(userId);
   
   // --- เปิด Google Sheet ตาม ID ที่ระบุ ---
   var spreadsheetId = SPREADSHEET_ID;
