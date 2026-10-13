@@ -876,7 +876,7 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                 <div className="space-y-1.5 font-mono text-[11px] bg-slate-100 p-2.5 rounded-lg border border-slate-300">
                   <div>
                     <span className="font-bold text-emerald-800">คอลัมน์ I (สถานะวันหมดอายุ):</span><br />
-                    <code>=IF(H2="","-", IF(H2&lt;TODAY(),"🚨 หมดอายุแล้ว", IF(H2-TODAY()&lt;=70,"⏳ ใกล้หมดอายุ ("&amp;(H2-TODAY())&amp;" วัน)","✅ ปลอดภัย ("&amp;(H2-TODAY())&amp;" วัน)")) )</code>
+                    <code>=IF(H2="","-", IF(H2&lt;TODAY(),"🚨 หมดอายุแล้ว", IF(H2-TODAY()&lt;=90,"⏳ ใกล้หมดอายุ ("&amp;(H2-TODAY())&amp;" วัน)","✅ ปลอดภัย ("&amp;(H2-TODAY())&amp;" วัน)")) )</code>
                   </div>
                   <div className="pt-1 border-t border-slate-200">
                     <span className="font-bold text-teal-800">คอลัมน์ N (สถานะสต็อก Min):</span><br />

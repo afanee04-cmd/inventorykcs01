@@ -204,7 +204,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       } else if (st.expiryStatus === 'near_expiry' && st.stockStatus === 'low') {
         alertText = '⚡ วิกฤต: ใกล้หมดอายุ & ต่ำกว่า Min';
       } else if (st.expiryStatus === 'near_expiry') {
-        alertText = '🟡 ใกล้หมดอายุ (≤ 70 วัน)';
+        alertText = '🟡 ใกล้หมดอายุ (≤ 90 วัน)';
       } else if (st.stockStatus === 'low') {
         alertText = '🟠 ถึงเกณฑ์ Min (ต้องสั่งเพิ่ม)';
       }
@@ -253,7 +253,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               </span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              แสดงสถานะยา: หมดอายุ, ใกล้หมดอายุ (≤ 70 วัน) และสต็อกต่ำกว่า Min พร้อมส่งออกลง Google Sheet
+              แสดงสถานะยา: หมดอายุ, ใกล้หมดอายุ (≤ 90 วัน) และสต็อกต่ำกว่า Min พร้อมส่งออกลง Google Sheet
             </p>
           </div>
 
@@ -376,7 +376,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               className="w-full py-2 px-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-sm text-emerald-950 font-medium"
             >
               <option value="all">สถานะทั้งหมด</option>
-              <option value="near_expiry">⏳ ใกล้หมดอายุ (≤ 70 วัน)</option>
+              <option value="near_expiry">⏳ ใกล้หมดอายุ (≤ 90 วัน)</option>
               <option value="expired">🚨 ยาหมดอายุแล้ว</option>
               <option value="low_stock">📉 สต็อกต่ำกว่า Min</option>
             </select>
@@ -684,7 +684,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> ปลอดภัย
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> ใกล้หมดอายุ (≤ 70 วัน)
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> ใกล้หมดอายุ (≤ 90 วัน)
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block"></span> หมดอายุ

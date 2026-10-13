@@ -22,7 +22,7 @@ export const DEFAULT_LINE_CONFIG: LineConfig = {
   channelAccessToken: '',
   destinationId: '',
   autoAlertEnabled: true,
-  alertDaysBeforeExpiry: 70, // 70 วันก่อนหมดอายุ
+  alertDaysBeforeExpiry: 90, // 90 วันก่อนหมดอายุ
   lastAlertSentAt: null,
 };
 

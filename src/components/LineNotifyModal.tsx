@@ -38,7 +38,7 @@ export const LineNotifyModal: React.FC<LineNotifyModalProps> = ({
 }) => {
   const [token, setToken] = useState(lineConfig.channelAccessToken || '');
   const [destinationId, setDestinationId] = useState(lineConfig.destinationId || '');
-  const [alertDays, setAlertDays] = useState(lineConfig.alertDaysBeforeExpiry || 70);
+  const [alertDays, setAlertDays] = useState(lineConfig.alertDaysBeforeExpiry || 90);
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedMsg, setCopiedMsg] = useState(false);
@@ -54,7 +54,7 @@ export const LineNotifyModal: React.FC<LineNotifyModalProps> = ({
       ...lineConfig,
       channelAccessToken: token.trim(),
       destinationId: destinationId.trim(),
-      alertDaysBeforeExpiry: Number(alertDays) || 70,
+      alertDaysBeforeExpiry: Number(alertDays) || 90,
     });
     setSendResult({ success: true, message: 'บันทึกการตั้งค่า LINE สำเร็จเรียบร้อย' });
   };
@@ -104,7 +104,7 @@ export const LineNotifyModal: React.FC<LineNotifyModalProps> = ({
                 ระบบแจ้งเตือนผ่าน LINE Messaging API
               </h3>
               <p className="text-xs text-emerald-200/80">
-                แจ้งเตือนอัตโนมัติ: ยาใกล้หมดอายุ 70 วัน, ยาหมดอายุ และสต็อกต่ำกว่า Min
+                แจ้งเตือนอัตโนมัติ: ยาใกล้หมดอายุ 90 วัน, ยาหมดอายุ และสต็อกต่ำกว่า Min
               </p>
             </div>
           </div>
@@ -156,11 +156,11 @@ export const LineNotifyModal: React.FC<LineNotifyModalProps> = ({
             </div>
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs">
-              <span className="font-bold text-amber-900 block font-['Prompt']">2. ยาใกล้หมดอายุ (≤ 70 วัน)</span>
+              <span className="font-bold text-amber-900 block font-['Prompt']">2. ยาใกล้หมดอายุ (≤ 90 วัน)</span>
               <span className="text-amber-800 text-sm font-extrabold mt-0.5 block">
                 {currentSummary.nearExpiryList.length} รายการ
               </span>
-              <span className="text-[11px] text-amber-700">เกณฑ์ 70 วัน รพ.เขาชัยสน</span>
+              <span className="text-[11px] text-amber-700">เกณฑ์ 90 วัน รพ.เขาชัยสน</span>
             </div>
 
             <div className="p-3 bg-orange-50 rounded-xl border border-orange-200 text-xs">
@@ -229,7 +229,7 @@ export const LineNotifyModal: React.FC<LineNotifyModalProps> = ({
                   onChange={(e) => setAlertDays(Number(e.target.value))}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
                 />
-                <span className="text-[10px] text-slate-500">กำหนดไว้ที่ 70 วันตามที่ต้องการ</span>
+                <span className="text-[10px] text-slate-500">กำหนดไว้ที่ 90 วันตามที่ต้องการ</span>
               </div>
             </div>
 

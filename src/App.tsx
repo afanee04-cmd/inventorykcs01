@@ -559,7 +559,7 @@ export default function App() {
             )}
           </div>
           <div className="text-[11px] text-emerald-400/80">
-            ระบบติดตามวันหมดอายุ 70 วัน • จุดสั่งซื้อ Min/Max • อัปเดต Google Sheet อัตโนมัติพร้อมคอลัมน์สถานะยา
+            ระบบติดตามวันหมดอายุ 90 วัน • จุดสั่งซื้อ Min/Max • อัปเดต Google Sheet อัตโนมัติพร้อมคอลัมน์สถานะยา
           </div>
         </div>
       </footer>

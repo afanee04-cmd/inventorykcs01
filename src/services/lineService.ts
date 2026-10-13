@@ -12,11 +12,11 @@ export interface AlertSummary {
 export const LineService = {
   /**
    * สรุปรายการยาที่ต้องแจ้งเตือนตามเงื่อนไข:
-   * 1. ยาใกล้หมดอายุ 70 วัน
+   * 1. ยาใกล้หมดอายุ 90 วัน
    * 2. ยาหมดอายุ
    * 3. ยาที่ถึง min หรือต่ำกว่า
    */
-  getAlertSummary(drugs: DrugItem[], daysThreshold: number = 70): AlertSummary {
+  getAlertSummary(drugs: DrugItem[], daysThreshold: number = 90): AlertSummary {
     const expiredList: { drug: DrugItem; daysLeft: number }[] = [];
     const nearExpiryList: { drug: DrugItem; daysLeft: number }[] = [];
     const lowStockList: { drug: DrugItem }[] = [];
@@ -46,7 +46,7 @@ export const LineService = {
   /**
    * สร้างข้อความแจ้งเตือนสำหรับ LINE
    */
-  buildAlertMessage(drugs: DrugItem[], daysThreshold: number = 70): string {
+  buildAlertMessage(drugs: DrugItem[], daysThreshold: number = 90): string {
     const summary = this.getAlertSummary(drugs, daysThreshold);
     const now = new Date();
     const dateFormatted = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear() + 543} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} น.`;
@@ -71,9 +71,9 @@ export const LineService = {
       }
     }
 
-    // 2. ยาใกล้หมดอายุ (<= 70 วัน)
+    // 2. ยาใกล้หมดอายุ (<= 90 วัน)
     if (summary.nearExpiryList.length > 0) {
-      msg += `\n⏳ ยาใกล้หมดอายุ <= 70 วัน (${summary.nearExpiryList.length} รายการ):\n`;
+      msg += `\n⏳ ยาใกล้หมดอายุ <= 90 วัน (${summary.nearExpiryList.length} รายการ):\n`;
       summary.nearExpiryList.forEach((item, index) => {
         if (index < 6) {
           msg += `${index + 1}. ${item.drug.name} (Lot: ${item.drug.lot})\n   - Shelf: ${item.drug.shelf} | คลัง: ${item.drug.subWarehouse}\n   - คงเหลือ: ${item.drug.quantity} ${item.drug.unit}\n   - หมดอายุ: ${formatThaiDate(item.drug.expiryDate)} [เหลืออีก ${item.daysLeft} วัน]\n`;
@@ -110,7 +110,7 @@ export const LineService = {
     drugs: DrugItem[],
     customMessage?: string
   ): Promise<{ success: boolean; message: string }> {
-    const textToSend = customMessage || this.buildAlertMessage(drugs, lineConfig.alertDaysBeforeExpiry || 70);
+    const textToSend = customMessage || this.buildAlertMessage(drugs, lineConfig.alertDaysBeforeExpiry || 90);
 
     // ส่งผ่าน Google Apps Script Backend (แนะนำสำหรับ CORS ใน Browser)
     if (gasConfig.scriptUrl) {

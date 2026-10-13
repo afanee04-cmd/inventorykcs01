@@ -173,7 +173,7 @@ export const GasApiService = {
         } else if (st.expiryStatus === 'near_expiry' && st.stockStatus === 'low') {
           alertSummaryText = '⚡ วิกฤต: ใกล้หมดอายุ & ต่ำกว่า Min';
         } else if (st.expiryStatus === 'near_expiry') {
-          alertSummaryText = '🟡 ใกล้หมดอายุ (≤ 70 วัน)';
+          alertSummaryText = '🟡 ใกล้หมดอายุ (≤ 90 วัน)';
         } else if (st.stockStatus === 'low') {
           alertSummaryText = '🟠 ถึงเกณฑ์ Min (ต้องสั่งเพิ่ม)';
         }

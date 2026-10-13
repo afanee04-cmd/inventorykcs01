@@ -40,7 +40,7 @@ export interface LineConfig {
   channelAccessToken: string;
   destinationId: string;       // User ID หรือ Group ID
   autoAlertEnabled: boolean;
-  alertDaysBeforeExpiry: number; // 70 วัน
+  alertDaysBeforeExpiry: number; // 90 วัน
   lastAlertSentAt: string | null;
 }
 

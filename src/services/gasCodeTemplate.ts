@@ -10,7 +10,7 @@ export function generateGoogleAppsScriptCode(sheetId: string, folderId: string):
  * ========================================================
  * ระบบคลังยานอก โรงพยาบาลเขาชัยสน (Google Apps Script Backend)
  * เชื่อมต่อ Google Sheet & Google Drive & LINE Messaging API
- * แสดงสถานะยา: หมดอายุแล้ว / ใกล้หมดอายุ (≤ 70 วัน) / ถึงเกณฑ์ Min
+ * แสดงสถานะยา: หมดอายุแล้ว / ใกล้หมดอายุ (≤ 90 วัน) / ถึงเกณฑ์ Min
  * ========================================================
  */
 
@@ -473,7 +473,7 @@ function computeDrugStatuses(expiryDateStr, qty, min, max) {
     } else if (daysLeft === 0) {
       isExpired = true;
       expiryStatusText = "🚨 หมดอายุวันนี้";
-    } else if (daysLeft <= 70) {
+    } else if (daysLeft <= 90) {
       isNearExpiry = true;
       expiryStatusText = "⏳ ใกล้หมดอายุ (เหลือ " + daysLeft + " วัน)";
     } else {
@@ -504,7 +504,7 @@ function computeDrugStatuses(expiryDateStr, qty, min, max) {
   } else if (isNearExpiry && isLowStock) {
     alertSummaryText = "⚡ วิกฤต: ใกล้หมดอายุ & ต่ำกว่า Min";
   } else if (isNearExpiry) {
-    alertSummaryText = "🟡 ใกล้หมดอายุ (≤ 70 วัน)";
+    alertSummaryText = "🟡 ใกล้หมดอายุ (≤ 90 วัน)";
   } else if (isLowStock) {
     alertSummaryText = "🟠 ถึงเกณฑ์ Min (ต้องสั่งเพิ่ม)";
   }
@@ -629,7 +629,7 @@ function pushLineMessage(token, to, text) {
 }
 
 /**
- * ตรวจสอบยาใกล้หมดอายุ 70 วัน, ยาหมดอายุ และสต็อกต่ำกว่า Min
+ * ตรวจสอบยาใกล้หมดอายุ 90 วัน, ยาหมดอายุ และสต็อกต่ำกว่า Min
  * รันอัตโนมัติทุกวันผ่าน Time-driven Trigger (เช่น 08:00 น.)
  * พร้อมอัปเดตสถานะใน Sheet อัตโนมัติทุกวัน
  */
@@ -674,7 +674,7 @@ function dailyAutoCheckAndNotifyLine() {
       
       if (diffDays < 0) {
         expiredItems.push("🔴 " + name + " (Lot: " + lot + ", คลัง: " + subWarehouse + ") [หมดอายุแล้ว " + Math.abs(diffDays) + " วัน]");
-      } else if (diffDays <= 70) {
+      } else if (diffDays <= 90) {
         nearExpiryItems.push("🟡 " + name + " (Lot: " + lot + ", Shelf: " + shelf + ", คลัง: " + subWarehouse + ") [เหลืออีก " + diffDays + " วัน]");
       }
     }
@@ -699,7 +699,7 @@ function dailyAutoCheckAndNotifyLine() {
   }
   
   if (nearExpiryItems.length > 0) {
-    message += "\\n\\n⏳ รายการยาใกล้หมดอายุ <= 70 วัน (" + nearExpiryItems.length + " รายการ):\\n" + nearExpiryItems.slice(0, 5).join("\\n");
+    message += "\\n\\n⏳ รายการยาใกล้หมดอายุ <= 90 วัน (" + nearExpiryItems.length + " รายการ):\\n" + nearExpiryItems.slice(0, 5).join("\\n");
     if (nearExpiryItems.length > 5) message += "\\n...และอีก " + (nearExpiryItems.length - 5) + " รายการ";
   }
   

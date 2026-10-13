@@ -40,7 +40,7 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
 
   // 3. คำนวณสถานะความปลอดภัย/หมดอายุ
   let safeCount = 0;
-  let nearExpiryCount = 0; // <= 70 วัน
+  let nearExpiryCount = 0; // <= 90 วัน
   let expiredCount = 0;
   let lowStockCount = 0;
 
@@ -272,7 +272,7 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
                 <Layers className="w-4 h-4 text-emerald-700" />
                 <span>สถานะวันหมดอายุ & ความปลอดภัย</span>
               </span>
-              <span className="text-[11px] text-slate-400">เกณฑ์ 70 วัน</span>
+              <span className="text-[11px] text-slate-400">เกณฑ์ 90 วัน</span>
             </div>
 
             <div className="space-y-2.5">
@@ -284,7 +284,7 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
               >
                 <div className="flex items-center space-x-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-semibold text-slate-700">ปลอดภัย (&gt; 70 วัน)</span>
+                  <span className="text-xs font-semibold text-slate-700">ปลอดภัย (&gt; 90 วัน)</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold text-emerald-700 font-mono">
@@ -296,14 +296,14 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
                 </div>
               </button>
 
-              {/* Near Expiry (<= 70 days) */}
+              {/* Near Expiry (<= 90 days) */}
               <button
                 onClick={() => onSelectFilter('near_expiry')}
                 className="w-full p-2.5 bg-white rounded-xl border border-amber-300 flex items-center justify-between hover:bg-amber-50/40 transition text-left cursor-pointer"
               >
                 <div className="flex items-center space-x-2">
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span className="text-xs font-semibold text-amber-900">ใกล้หมดอายุ (≤ 70 วัน)</span>
+                  <span className="text-xs font-semibold text-amber-900">ใกล้หมดอายุ (≤ 90 วัน)</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold text-amber-700 font-mono">

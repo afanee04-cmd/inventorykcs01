@@ -276,7 +276,7 @@ export const DrugModal: React.FC<DrugModalProps> = ({
                 }`}
               />
               <p className="text-[10px] text-amber-700 mt-1">
-                * ระบบจะแจ้งเตือนอัตโนมัติเมื่อเหลือ ≤ 70 วัน
+                * ระบบจะแจ้งเตือนอัตโนมัติเมื่อเหลือ ≤ 90 วัน
               </p>
               {errors.expiryDate && <p className="text-[11px] text-rose-500 mt-1">{errors.expiryDate}</p>}
             </div>

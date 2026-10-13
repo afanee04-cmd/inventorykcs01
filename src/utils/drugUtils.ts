@@ -2,7 +2,7 @@ import { DrugItem, DrugStatusSummary } from '../types/inventory';
 
 /**
  * คำนวณสถานะวันหมดอายุและสต็อกของยา
- * - ใกล้หมดอายุ: <= 70 วัน
+ * - ใกล้หมดอายุ: <= 90 วัน
  * - หมดอายุแล้ว: < 0 วัน
  * - สต็อกต่ำ: quantity <= min
  */
@@ -19,7 +19,7 @@ export function getDrugStatus(drug: DrugItem, customCurrentDate?: Date): DrugSta
   let expiryStatus: 'expired' | 'near_expiry' | 'safe' = 'safe';
   if (daysLeft < 0) {
     expiryStatus = 'expired';
-  } else if (daysLeft <= 70) {
+  } else if (daysLeft <= 90) {
     expiryStatus = 'near_expiry';
   }
 
@@ -83,7 +83,7 @@ export function getDaysLeftBadge(daysLeft: number): {
       borderClass: 'border-l-4 border-rose-600',
     };
   }
-  if (daysLeft <= 70) {
+  if (daysLeft <= 90) {
     return {
       text: `ใกล้หมดอายุ (เหลือ ${daysLeft} วัน)`,
       badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-semibold',
@@ -105,8 +105,8 @@ export interface DrugStatusBadge {
 
 /**
  * คำนวณสถานะแสดงในตารางและ Sheet ตาม chart สถานะวันหมดอายุ:
- * 1. ปลอดภัย (> 70 วัน)
- * 2. ใกล้หมดอายุ (≤ 70 วัน)
+ * 1. ปลอดภัย (> 90 วัน)
+ * 2. ใกล้หมดอายุ (≤ 90 วัน)
  * 3. หมดอายุ (หมดอายุแล้ว)
  * 4. สต็อกถึงเกณฑ์ min (quantity <= min)
  */
